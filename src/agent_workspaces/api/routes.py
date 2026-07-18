@@ -43,6 +43,20 @@ async def launch(
     return LaunchResponse(workspace_id=workspace_id, trace_id=trace_id)
 
 
+@router.get("/security/egress-audit")
+async def egress_audit(
+    orchestrator: Orchestrator = Depends(get_orchestrator),
+) -> dict:
+    """Return the egress audit log: every allow/block decision the proxy has made.
+
+    Empty + ``enforced: false`` when the mock security plane is active (no proxy).
+    """
+    audit = getattr(orchestrator.security, "audit", None)
+    if audit is None:
+        return {"enforced": False, "entries": []}
+    return {"enforced": True, "entries": audit.entries()}
+
+
 @router.websocket("/traces/{trace_id}/stream")
 async def stream_trace(websocket: WebSocket, trace_id: str) -> None:
     """Stream a trace's events: full history so far, then live to `workspace.end`."""

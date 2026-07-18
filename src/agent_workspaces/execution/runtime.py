@@ -69,6 +69,8 @@ class DockerBackend(RuntimeBackend):
                 detach=True,
                 working_dir=self.settings.sandbox_workdir,
                 network_mode=self.settings.sandbox_network,
+                environment=self._proxy_env(),
+                extra_hosts=self._extra_hosts(),
                 # TODO (security plane): drop capabilities, read-only rootfs where
                 # possible, cgroup limits, non-root user, seccomp/AppArmor profile.
             )
@@ -76,6 +78,28 @@ class DockerBackend(RuntimeBackend):
             return str(container.id)
 
         return await asyncio.to_thread(_run)
+
+    def _proxy_env(self) -> dict[str, str]:
+        """When the proxy security plane is active, force ALL container egress
+        through the host's egress proxy so the allowlist can't be bypassed."""
+        if self.settings.security_backend != "proxy":
+            return {}
+        proxy_url = f"http://host.docker.internal:{self.settings.egress_proxy_port}"
+        return {
+            "HTTP_PROXY": proxy_url,
+            "HTTPS_PROXY": proxy_url,
+            "http_proxy": proxy_url,
+            "https_proxy": proxy_url,
+            "NO_PROXY": "localhost,127.0.0.1",
+            "no_proxy": "localhost,127.0.0.1",
+        }
+
+    def _extra_hosts(self) -> dict[str, str] | None:
+        """Make the host reachable from inside the container as host.docker.internal
+        (needed on Linux, where it isn't provided automatically)."""
+        if self.settings.security_backend != "proxy":
+            return None
+        return {"host.docker.internal": "host-gateway"}
 
     async def exec(self, runtime_ref: str, argv: list[str]) -> tuple[int, bytes, bytes]:
         def _exec() -> tuple[int, bytes, bytes]:

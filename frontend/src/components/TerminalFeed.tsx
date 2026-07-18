@@ -24,6 +24,22 @@ function Line({ event }: { event: TraceEvent }) {
           <span className="text-sky-500/60">●</span> {event.kind.replace("plane.", "")} plane ready
         </div>
       );
+    case "security.egress": {
+      const allowed = p.allowed === true;
+      const method = str(p.method);
+      const host = str(p.host);
+      const path = str(p.path);
+      const injected = p.credential_injected === true;
+      return (
+        <div className={"font-mono text-[12px] " + (allowed ? "text-amber-300/80" : "text-red-400")}>
+          <span>{allowed ? "⇅" : "⛔"}</span> egress {allowed ? "ALLOW" : "BLOCK"}{" "}
+          <span className="text-zinc-500">{method}</span> {host}
+          {path}
+          {injected ? <span className="text-emerald-400"> · credential injected</span> : null}
+          {!allowed ? <span className="text-red-500/80"> · {str(p.reason)}</span> : null}
+        </div>
+      );
+    }
     case "agent.start":
       return (
         <div className="text-zinc-400">

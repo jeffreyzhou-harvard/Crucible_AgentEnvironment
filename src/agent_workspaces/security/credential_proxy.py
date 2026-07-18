@@ -12,6 +12,7 @@ import abc
 
 from ..config import Settings
 from ..models import Sandbox
+from .proxy_server import EgressProxy
 
 
 class CredentialProxy(abc.ABC):
@@ -47,3 +48,29 @@ class MockCredentialProxy(CredentialProxy):
 
     async def detach(self, sandbox: Sandbox) -> None:
         return None
+
+
+class HttpCredentialProxy(CredentialProxy):
+    """Real, proxy-backed credential broker.
+
+    Owns a shared :class:`EgressProxy`. ``attach`` ensures it is running, loads the
+    credential map (host -> token) that the proxy injects at egress, and marks this
+    sandbox as the active identity. The secret is attached to outbound requests by
+    the proxy and never enters the sandbox, so a fully compromised sandbox has
+    nothing to steal.
+    """
+
+    def __init__(self, settings: Settings, proxy: EgressProxy) -> None:
+        self.settings = settings
+        self.proxy = proxy
+
+    async def attach(self, sandbox: Sandbox) -> str:
+        url = self.proxy.start()
+        self.proxy.set_credentials(self.settings.proxy_credentials)
+        self.proxy.set_active_sandbox(sandbox.id)
+        return url
+
+    async def detach(self, sandbox: Sandbox) -> None:
+        # Revoke this sandbox's identity. The shared proxy keeps running for the
+        # next run; it is stopped on application shutdown.
+        self.proxy.set_active_sandbox(None)

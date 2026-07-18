@@ -25,7 +25,7 @@ from .control.warm_pool import WarmPool
 from .data.provisioner import DataPlane, MockDataPlane
 from .execution.sandbox import DockerSandboxRuntime, MockSandboxRuntime, SandboxRuntime
 from .orchestrator import Orchestrator
-from .security.isolation import MockSecurityPlane, SecurityPlane
+from .security.isolation import MockSecurityPlane, ProxyingSecurityPlane, SecurityPlane
 from .trace.bus import TraceBus
 from .trace.recorder import InMemoryTraceRecorder, TraceRecorder
 
@@ -47,7 +47,12 @@ def build_orchestrator(settings: Settings | None = None, bus: TraceBus | None = 
     else:
         runtime = MockSandboxRuntime(settings=settings)
 
-    security: SecurityPlane = MockSecurityPlane(settings=settings)
+    security: SecurityPlane
+    if settings.security_backend == "proxy":
+        security = ProxyingSecurityPlane(settings=settings)
+    else:
+        security = MockSecurityPlane(settings=settings)
+
     data: DataPlane = MockDataPlane(settings=settings)
     trace: TraceRecorder = InMemoryTraceRecorder(settings=settings, bus=bus)
 
@@ -70,7 +75,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.tasks = set()
     # TODO: start the warm-pool refill loop + demand predictor here for real speed.
     yield
-    # TODO: on shutdown, cancel in-flight tasks and destroy every live sandbox.
+    # Stop the shared egress proxy if the security plane started one.
+    security = getattr(app.state.orchestrator, "security", None)
+    shutdown = getattr(security, "shutdown", None)
+    if callable(shutdown):
+        shutdown()
+    # TODO: on shutdown, also cancel in-flight tasks and destroy every live sandbox.
 
 
 app = FastAPI(title="agent-workspaces control plane", version="0.1.0", lifespan=lifespan)
