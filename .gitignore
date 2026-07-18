@@ -32,3 +32,6 @@ htmlcov/
 # Frontend (also covered by frontend/.gitignore)
 frontend/node_modules/
 frontend/dist/
+
+# Vendored reference copy of the frontend-components skill (not app source)
+frontend-components-1.0.0/

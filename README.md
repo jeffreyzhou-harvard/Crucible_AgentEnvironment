@@ -42,6 +42,38 @@ This scaffold ships a working vertical slice you can demo:
 Set `AWS_RUNTIME_BACKEND=mock` to run the entire lifecycle with **no Docker and no API
 key** — the mock execution plane still emits a trace, so the frontend works end-to-end.
 
+## Best-of-N experiments — the autoresearch demo
+
+The workspace is the substrate; the **experiment** is the loop that runs on it. The
+`Best-of-N` tab launches N agents that solve the same task in parallel, each in its own
+isolated, byte-identical sandbox, then scores every candidate against a **held-out
+grader** the candidate never sees. This is the atomic unit of a self-improvement loop —
+*propose → test → validate → select* — and it makes the environment's guarantees do real
+safety work:
+
+- **Reproducibility receipt** — every candidate prints a hash of its starting world;
+  the UI shows they're identical (the copy-on-write "same world" claim, proven live).
+- **Two-number score** — *in-sandbox* vs *held-out*. A candidate that games the visible
+  tests scores high in-sandbox and low held-out; the gap **is** the reward-hack, and it's
+  disqualified. You can't cheat your way up the leaderboard.
+- **Egress + secretless controls** — network is deny-all; an allowlist-gated `web_fetch`
+  broker denies off-list hosts (shown in red). Red-team candidates probe these controls
+  and get caught.
+- **Isolation** — untrusted, self-generated code (including the grader's run of it)
+  executes only inside network-disabled containers, never on the host.
+
+Two backends, same event stream + dashboard:
+
+- **Scripted** (default, `AWS_RUNTIME_BACKEND=mock`) — a believable run with no Docker
+  and no API key. Reliable for a stage demo.
+- **Real** (`AWS_RUNTIME_BACKEND=docker` + `ANTHROPIC_API_KEY`) — Claude agents in
+  containers, scored by the external held-out grader in fresh throwaway sandboxes.
+
+```
+POST /v1/experiments:launch → {experiment_id, trace_id}
+WS   /v1/traces/{trace_id}/stream   # one stream; events stamped per candidate
+```
+
 ## Lifecycle
 
 ```
@@ -64,15 +96,22 @@ src/agent_workspaces/
 ├── models.py          # shared domain models (Pydantic)
 ├── orchestrator.py    # streaming lifecycle: begin() + run_lifecycle()
 ├── main.py            # FastAPI app + composition root (mock vs docker)
-├── api/routes.py      # POST /v1/workspaces:launch + WS /v1/traces/{id}/stream
+├── api/routes.py      # launch/experiments endpoints + WS /v1/traces/{id}/stream
 ├── control/           # Control plane  — scheduler, warm pool, intent
 ├── execution/         # Execution plane — sandbox, runtime (docker), agent (Claude)
 ├── security/          # Security plane  — credential proxy, network, isolation
 ├── data/              # Data plane      — provisioner, branching, health
+├── experiment/        # Best-of-N: tasks · grader · scripted · docker_runner · runner
 └── trace/             # bus (pub/sub) · tracer · recorder
 
-frontend/              # React + Vite + TS + Tailwind mission-control UI
+frontend/              # React + Vite + TS + Tailwind + Recharts dashboard
 ```
+
+> The dashboard follows the `frontend-components` skill's patterns (Card layout,
+> loading/empty/error states, Recharts charts, custom tooltips, Badge color helpers,
+> a `DashboardShell`-style container). It's adapted from that skill's Next.js 15 / SWR /
+> React 19 stack to this repo's Vite + React 18 setup, and uses **WebSocket streaming**
+> instead of SWR polling — the right call for a live race — and **Recharts 2.x** (React 18).
 
 ## Getting started
 

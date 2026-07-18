@@ -55,7 +55,9 @@ class DockerBackend(RuntimeBackend):
         self._docker = docker
         self.client = docker.from_env()
 
-    async def restore_from_snapshot(self, base_image: str) -> str:
+    async def restore_from_snapshot(self, base_image: str, network: str | None = None) -> str:
+        net = network or self.settings.sandbox_network
+
         def _run() -> str:
             try:
                 self.client.images.get(base_image)
@@ -68,7 +70,7 @@ class DockerBackend(RuntimeBackend):
                 command=["sleep", "infinity"],  # keep it alive; we exec into it
                 detach=True,
                 working_dir=self.settings.sandbox_workdir,
-                network_mode=self.settings.sandbox_network,
+                network_mode=net,  # per-call override; "none" for experiments = deny-all
                 environment=self._proxy_env(),
                 extra_hosts=self._extra_hosts(),
                 # TODO (security plane): drop capabilities, read-only rootfs where
@@ -100,6 +102,22 @@ class DockerBackend(RuntimeBackend):
         if self.settings.security_backend != "proxy":
             return None
         return {"host.docker.internal": "host-gateway"}
+
+    async def write_file(self, runtime_ref: str, path: str, content: str) -> None:
+        """Write a file into the container without a bind mount or a shell heredoc
+        (base64 round-trip avoids all quoting pitfalls)."""
+        import base64
+
+        encoded = base64.b64encode(content.encode()).decode()
+
+        def _write() -> None:
+            container = self.client.containers.get(runtime_ref)
+            container.exec_run(
+                ["sh", "-lc", f"echo {encoded} | base64 -d > {path}"],
+                workdir=self.settings.sandbox_workdir,
+            )
+
+        await asyncio.to_thread(_write)
 
     async def exec(self, runtime_ref: str, argv: list[str]) -> tuple[int, bytes, bytes]:
         def _exec() -> tuple[int, bytes, bytes]:

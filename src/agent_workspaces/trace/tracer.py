@@ -21,13 +21,25 @@ def _now() -> datetime:
 
 class Tracer:
     def __init__(
-        self, recorder: TraceRecorder, trace_id: TraceId, workspace_id: WorkspaceId
+        self,
+        recorder: TraceRecorder,
+        trace_id: TraceId,
+        workspace_id: WorkspaceId,
+        context: dict[str, Any] | None = None,
     ) -> None:
         self.recorder = recorder
         self.trace_id = trace_id
         self.workspace_id = workspace_id
+        # Merged into every event payload — e.g. {"candidate": 2} so a fan-out of
+        # candidates can share one trace stream and the frontend can demux by column.
+        self.context = context or {}
 
     async def emit(self, kind: str, **payload: Any) -> None:
         await self.recorder.record(
-            TraceEvent(trace_id=self.trace_id, ts=_now(), kind=kind, payload=payload)
+            TraceEvent(
+                trace_id=self.trace_id,
+                ts=_now(),
+                kind=kind,
+                payload={**self.context, **payload},
+            )
         )

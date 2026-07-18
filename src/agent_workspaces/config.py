@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     agent_max_iterations: int = 25
     agent_max_output_tokens: int = 8192
 
+    # --- Experiments (fan-out best-of-N) ---
+    experiment_candidates: int = 4          # how many candidates race per experiment
+    experiment_redteam: int = 1             # how many are adversarial (probe the controls)
+    # Force the scripted (no Docker / no API key) experiment path regardless of backend.
+    experiment_scripted: bool = False
+    experiment_step_delay: float = 0.35     # scripted pacing (seconds between beats)
+
     # --- Security & network plane ---
     # "mock" logs intent and enforces nothing; "proxy" runs a real secretless egress
     # proxy that allowlists destinations and injects credentials on the way out.

@@ -124,6 +124,26 @@ class LaunchResponse(BaseModel):
     trace_id: TraceId
 
 
+# --------------------------------------------------------------------------- #
+# Experiments (fan-out best-of-N)
+# --------------------------------------------------------------------------- #
+class ExperimentRequest(BaseModel):
+    """Run one task N times in parallel, score each in its own sandbox, and rank.
+
+    The atomic unit of a self-improvement loop: propose N solutions → test each in an
+    isolated, reproducible workspace → validate against a held-out grader → select.
+    """
+
+    task_id: str = "devowel"  # which task in experiment/tasks.py
+    candidates: int | None = None  # default: settings.experiment_candidates
+    redteam: int | None = None  # how many adversarial candidates; default from settings
+
+
+class ExperimentLaunchResponse(BaseModel):
+    experiment_id: str
+    trace_id: TraceId
+
+
 class TraceEvent(BaseModel):
     """One recorded step in an execution trajectory (command, tool call, output)."""
 

@@ -10,11 +10,20 @@ import asyncio
 
 from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
 
-from ..models import LaunchResponse, TraceEvent, WorkspaceRequest
+from ..experiment.runner import new_experiment_ids, run_experiment
+from ..models import (
+    ExperimentLaunchResponse,
+    ExperimentRequest,
+    LaunchResponse,
+    TraceEvent,
+    WorkspaceRequest,
+)
 from ..orchestrator import Orchestrator
 from ..trace.bus import TraceBus
 
 router = APIRouter(prefix="/v1", tags=["workspaces"])
+
+_TERMINAL_KINDS = {"workspace.end", "experiment.end"}
 
 
 def get_orchestrator(request: Request) -> Orchestrator:
@@ -57,9 +66,30 @@ async def egress_audit(
     return {"enforced": True, "entries": audit.entries()}
 
 
+@router.post("/experiments:launch", response_model=ExperimentLaunchResponse)
+async def launch_experiment(
+    body: ExperimentRequest,
+    request: Request,
+    orchestrator: Orchestrator = Depends(get_orchestrator),
+) -> ExperimentLaunchResponse:
+    """Start a best-of-N experiment and return its ids immediately.
+
+    N candidates race in parallel; each is scored against a held-out grader. Watch it
+    live at `/v1/traces/{trace_id}/stream`.
+    """
+    experiment_id, trace_id = new_experiment_ids()
+    task = asyncio.create_task(
+        run_experiment(orchestrator.trace, orchestrator.settings, body, experiment_id, trace_id)
+    )
+    tasks: set = request.app.state.tasks
+    tasks.add(task)
+    task.add_done_callback(tasks.discard)
+    return ExperimentLaunchResponse(experiment_id=experiment_id, trace_id=trace_id)
+
+
 @router.websocket("/traces/{trace_id}/stream")
 async def stream_trace(websocket: WebSocket, trace_id: str) -> None:
-    """Stream a trace's events: full history so far, then live to `workspace.end`."""
+    """Stream a trace: full history so far, then live until a terminal event."""
     await websocket.accept()
     bus: TraceBus = websocket.app.state.trace_bus
     history, queue = await bus.subscribe(trace_id)
@@ -71,12 +101,12 @@ async def stream_trace(websocket: WebSocket, trace_id: str) -> None:
         ended = False
         for event in history:
             await websocket.send_json(to_json(event))
-            if event.kind == "workspace.end":
+            if event.kind in _TERMINAL_KINDS:
                 ended = True
         while not ended:
             event = await queue.get()
             await websocket.send_json(to_json(event))
-            if event.kind == "workspace.end":
+            if event.kind in _TERMINAL_KINDS:
                 break
     except WebSocketDisconnect:
         pass

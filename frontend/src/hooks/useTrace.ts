@@ -30,7 +30,7 @@ export function useTrace(traceId: string | null): {
     ws.onmessage = (msg) => {
       const event = JSON.parse(msg.data) as TraceEvent;
       setEvents((prev) => [...prev, event]);
-      if (event.kind === "workspace.end") {
+      if (event.kind === "workspace.end" || event.kind === "experiment.end") {
         doneRef.current = true;
         setStatus("done");
       }

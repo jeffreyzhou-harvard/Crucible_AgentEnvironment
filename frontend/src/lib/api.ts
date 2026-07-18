@@ -1,9 +1,28 @@
-import type { LaunchRequest, LaunchResponse } from "../types";
+import type {
+  ExperimentLaunchResponse,
+  ExperimentRequest,
+  LaunchRequest,
+  LaunchResponse,
+} from "../types";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 export async function launchWorkspace(req: LaunchRequest): Promise<LaunchResponse> {
   const res = await fetch(`${API_URL}/v1/workspaces:launch`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    throw new Error(`Launch failed (${res.status}): ${await res.text()}`);
+  }
+  return res.json();
+}
+
+export async function launchExperiment(
+  req: ExperimentRequest,
+): Promise<ExperimentLaunchResponse> {
+  const res = await fetch(`${API_URL}/v1/experiments:launch`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(req),
