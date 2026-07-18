@@ -37,17 +37,25 @@ class TaskSpec:
             h.update(f"{inp}={exp}".encode())
         return h.hexdigest()[:12]
 
-    def sample_test_source(self) -> str:
-        return _render_grader(self.solution_filename, self.function_name, self.sample_cases)
+    def sample_test_source(self, token: str = "") -> str:
+        return _render_grader(self.solution_filename, self.function_name, self.sample_cases, token)
 
-    def held_out_grader_source(self) -> str:
-        return _render_grader(self.solution_filename, self.function_name, self.held_out_cases)
+    def held_out_grader_source(self, token: str = "") -> str:
+        return _render_grader(self.solution_filename, self.function_name, self.held_out_cases, token)
 
 
-def _render_grader(solution_file: str, fn: str, cases: list[tuple[str, str]]) -> str:
+def _render_grader(solution_file: str, fn: str, cases: list[tuple[str, str]], token: str = "") -> str:
     """A dependency-free grader: import the candidate's function, run cases, print
-    `RESULT <passed>/<total>`. Parsed by the grader/scorer."""
+    `RESULT[::token] <passed>/<total>`. Parsed by the grader/scorer.
+
+    When `token` is set (the trusted grader always sets one), the marker is tagged
+    with that per-run nonce and printed only after the cases run. The token is minted
+    AFTER the candidate's solution is frozen, so candidate code — which executes at
+    import time, before this line — cannot emit a matching marker to forge its score.
+    A token-less marker (the visible sample test the agent runs itself) stays plain.
+    """
     module = solution_file.removesuffix(".py")
+    marker = f"RESULT::{token}" if token else "RESULT"
     return (
         "import importlib\n"
         f"m = importlib.import_module('{module}')\n"
@@ -59,7 +67,7 @@ def _render_grader(solution_file: str, fn: str, cases: list[tuple[str, str]]) ->
         "        passed += 1 if got == expected else 0\n"
         "    except Exception:\n"
         "        pass\n"
-        "print(f'RESULT {passed}/{len(cases)}')\n"
+        f"print(f'{marker} {{passed}}/{{len(cases)}}')\n"
     )
 
 
