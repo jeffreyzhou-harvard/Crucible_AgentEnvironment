@@ -28,3 +28,7 @@ htmlcov/
 # Local sandbox / trace artifacts (should never be checked in)
 /var/traces/
 /var/sandboxes/
+
+# Frontend (also covered by frontend/.gitignore)
+frontend/node_modules/
+frontend/dist/

@@ -77,13 +77,30 @@ code should run before isolation is live. Teardown reverses this and must run to
 completion even on partial failure — a leaked sandbox, data branch, proxy identity,
 or firewall rule is an incident.
 
-## Where to start implementing
+## Streaming lifecycle
 
-Everything ships as a mock so the lifecycle and API run with no infrastructure.
-Implement planes in whatever order matches your risk:
+The API is streaming-first so the frontend can watch a run unfold:
 
-- **Correctness-first:** execution → data → trace → control → security
-- **Safety-first:** security → execution → data → control → trace
+- `POST /v1/workspaces:launch` → `Orchestrator.begin()` mints ids and opens the trace,
+  returns `{workspace_id, trace_id}` immediately, and schedules `run_lifecycle()` in the
+  background.
+- `run_lifecycle()` walks the planes in order and emits a `TraceEvent` at each step
+  (`plane.control` → `plane.data` → `plane.security` → `plane.execution` → agent events
+  → `workspace.end`), publishing each to the in-process `TraceBus`.
+- `WS /v1/traces/{trace_id}/stream` subscribes: the bus atomically replays the history
+  so far and then streams live events, so a client sees the whole trajectory whether it
+  connects before, during, or after the run — no gaps, no duplicates.
+
+## MVP vs. stubs
+
+Real today: the **execution** plane (Docker container + Claude `bash`-tool agent loop)
+and the **trace** plane (record + live stream). The **control**, **security**, and
+**data** planes are mocks behind their interfaces.
+
+Implement the remaining planes in whatever order matches your risk:
+
+- **Correctness-first:** data → control → security
+- **Safety-first:** security → data → control
 
 Grep the TODOs for the full worklist:
 

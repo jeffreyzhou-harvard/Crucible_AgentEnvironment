@@ -3,44 +3,53 @@
 Run with:  uvicorn agent_workspaces.main:app --reload
 Or:        agent-workspaces   (see [project.scripts] in pyproject.toml)
 
-This module also contains `build_orchestrator()`, the composition root where the
-concrete plane implementations are chosen based on settings. Swap the mock
-backends here as you implement each plane.
+`build_orchestrator()` is the composition root: it picks the concrete plane
+implementations from settings. For the MVP, the EXECUTION and TRACE planes are real
+(Docker + streaming) while the CONTROL, SECURITY, and DATA planes are still mocks —
+swap those in as you implement them.
 """
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from .api.routes import router
 from .config import Settings, get_settings
 from .control.scheduler import InMemoryScheduler, Scheduler
 from .control.warm_pool import WarmPool
 from .data.provisioner import DataPlane, MockDataPlane
-from .execution.sandbox import MockSandboxRuntime, SandboxRuntime
+from .execution.sandbox import DockerSandboxRuntime, MockSandboxRuntime, SandboxRuntime
 from .orchestrator import Orchestrator
 from .security.isolation import MockSecurityPlane, SecurityPlane
+from .trace.bus import TraceBus
 from .trace.recorder import InMemoryTraceRecorder, TraceRecorder
 
 
-def build_orchestrator(settings: Settings | None = None) -> Orchestrator:
-    """Composition root: pick concrete backends per settings and wire them up.
+def build_orchestrator(settings: Settings | None = None, bus: TraceBus | None = None) -> Orchestrator:
+    """Pick concrete backends per settings and wire them up.
 
-    TODO: select real implementations based on settings.runtime_backend,
-    settings.data_branch_backend, etc. For now everything is a mock so the API
-    boots and the lifecycle is exercisable end-to-end without infrastructure.
+    EXECUTION: real Docker runtime when AWS_RUNTIME_BACKEND=docker, else mock.
+    CONTROL / SECURITY / DATA: still mocks in the MVP — implement and swap here.
     """
     settings = settings or get_settings()
 
     warm_pool = WarmPool(settings=settings)
     scheduler: Scheduler = InMemoryScheduler(warm_pool=warm_pool, settings=settings)
-    runtime: SandboxRuntime = MockSandboxRuntime(settings=settings)
+
+    runtime: SandboxRuntime
+    if settings.runtime_backend == "docker":
+        runtime = DockerSandboxRuntime(settings=settings)
+    else:
+        runtime = MockSandboxRuntime(settings=settings)
+
     security: SecurityPlane = MockSecurityPlane(settings=settings)
     data: DataPlane = MockDataPlane(settings=settings)
-    trace: TraceRecorder = InMemoryTraceRecorder(settings=settings)
+    trace: TraceRecorder = InMemoryTraceRecorder(settings=settings, bus=bus)
 
     return Orchestrator(
         scheduler=scheduler,
@@ -54,16 +63,26 @@ def build_orchestrator(settings: Settings | None = None) -> Orchestrator:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Start/stop background work owned by the control plane."""
-    orchestrator = build_orchestrator()
-    app.state.orchestrator = orchestrator
-    # TODO: start the warm-pool refill loop and the demand predictor here.
-    #       e.g. task = asyncio.create_task(orchestrator.scheduler.warm_pool.run())
+    bus = TraceBus()
+    app.state.trace_bus = bus
+    app.state.orchestrator = build_orchestrator(bus=bus)
+    # Track background lifecycle tasks so they aren't garbage-collected mid-run.
+    app.state.tasks = set()
+    # TODO: start the warm-pool refill loop + demand predictor here for real speed.
     yield
-    # TODO: drain in-flight workspaces and destroy all sandboxes on shutdown.
+    # TODO: on shutdown, cancel in-flight tasks and destroy every live sandbox.
 
 
 app = FastAPI(title="agent-workspaces control plane", version="0.1.0", lifespan=lifespan)
+
+# TODO: lock CORS down to the deployed frontend origin. Open for local dev.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(router)
 
 

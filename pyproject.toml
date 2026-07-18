@@ -17,8 +17,9 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
+    "anthropic>=0.69",          # the agent loop (execution plane)
+    "docker>=7.1",              # the Docker runtime backend (execution plane)
     # TODO: add a real datastore client for the trace store (e.g. asyncpg / redis).
-    # TODO: add a container/VM runtime client for the execution plane (e.g. docker sdk).
 ]
 
 [project.optional-dependencies]

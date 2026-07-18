@@ -1,49 +1,76 @@
-"""Control-plane HTTP routes.
+"""Control-plane HTTP + WebSocket routes.
 
-Thin layer: validate input, delegate to the orchestrator, shape the response.
-Business logic belongs in the planes, not here.
+Thin layer: validate input, kick off the lifecycle, stream the trace. Business
+logic lives in the planes, not here.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+import asyncio
 
-from ..models import ExecutionResult, Workspace, WorkspaceRequest
+from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
+
+from ..models import LaunchResponse, TraceEvent, WorkspaceRequest
 from ..orchestrator import Orchestrator
+from ..trace.bus import TraceBus
 
 router = APIRouter(prefix="/v1", tags=["workspaces"])
 
 
 def get_orchestrator(request: Request) -> Orchestrator:
-    """Pull the process-wide orchestrator off app state (set in lifespan)."""
     return request.app.state.orchestrator  # type: ignore[no-any-return]
 
 
-@router.post("/workspaces", response_model=Workspace)
-async def create_workspace(
+@router.post("/workspaces:launch", response_model=LaunchResponse)
+async def launch(
     body: WorkspaceRequest,
+    request: Request,
     orchestrator: Orchestrator = Depends(get_orchestrator),
-) -> Workspace:
-    """Assemble a workspace and return its handle (does NOT run the agent yet)."""
-    # TODO: authenticate the caller and enforce per-tenant quotas before creating.
-    return await orchestrator.create_workspace(body)
+) -> LaunchResponse:
+    """Start a workspace and return its ids immediately.
 
-
-@router.post("/workspaces:execute", response_model=ExecutionResult)
-async def execute(
-    body: WorkspaceRequest,
-    orchestrator: Orchestrator = Depends(get_orchestrator),
-) -> ExecutionResult:
-    """One-shot: create → run → destroy. Returns the execution result.
-
-    TODO: for long runs, make this async — return a workspace id immediately and
-    stream results/trace over websocket or SSE instead of blocking the request.
+    The lifecycle (provision → secure → run agent → tear down) runs in the
+    background; connect to `/v1/traces/{trace_id}/stream` to watch it live.
     """
-    return await orchestrator.execute(body)
+    # TODO: authenticate the caller and enforce per-tenant quotas before launching.
+    workspace_id, trace_id = await orchestrator.begin(body)
+
+    task = asyncio.create_task(orchestrator.run_lifecycle(body, workspace_id, trace_id))
+    tasks: set = request.app.state.tasks
+    tasks.add(task)
+    task.add_done_callback(tasks.discard)
+
+    return LaunchResponse(workspace_id=workspace_id, trace_id=trace_id)
 
 
-# TODO: add the rest of the surface as you flesh out the planes:
-#   GET  /v1/workspaces/{id}            -> current Workspace + SandboxState
-#   POST /v1/workspaces/{id}:destroy    -> force teardown
-#   GET  /v1/traces/{trace_id}          -> fetch a persisted trajectory (replay/eval)
-#   GET  /v1/pool                       -> warm-pool stats (debugging the control plane)
+@router.websocket("/traces/{trace_id}/stream")
+async def stream_trace(websocket: WebSocket, trace_id: str) -> None:
+    """Stream a trace's events: full history so far, then live to `workspace.end`."""
+    await websocket.accept()
+    bus: TraceBus = websocket.app.state.trace_bus
+    history, queue = await bus.subscribe(trace_id)
+
+    def to_json(event: TraceEvent) -> dict:
+        return event.model_dump(mode="json")
+
+    try:
+        ended = False
+        for event in history:
+            await websocket.send_json(to_json(event))
+            if event.kind == "workspace.end":
+                ended = True
+        while not ended:
+            event = await queue.get()
+            await websocket.send_json(to_json(event))
+            if event.kind == "workspace.end":
+                break
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await bus.unsubscribe(trace_id, queue)
+
+
+# TODO: round out the surface as the planes get real:
+#   GET  /v1/traces/{trace_id}            -> fetch a persisted trajectory (replay/eval)
+#   POST /v1/workspaces/{id}:destroy      -> force teardown of a live workspace
+#   GET  /v1/pool                         -> warm-pool stats (debug the control plane)

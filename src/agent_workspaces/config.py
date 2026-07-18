@@ -34,8 +34,18 @@ class Settings(BaseSettings):
 
     # --- Execution plane ---
     runtime_backend: Literal["mock", "docker", "firecracker", "k8s"] = "mock"
-    sandbox_base_image: str = "agent-workspace:base"
+    sandbox_base_image: str = "python:3.11"  # pullable default so the docker backend works OOTB
     sandbox_max_lifetime_seconds: int = 3600
+    sandbox_workdir: str = "/workspace"
+    # Docker network for the sandbox container. "bridge" = normal egress (MVP default).
+    # TODO: the security plane should replace this with an isolated network + egress proxy.
+    sandbox_network: str = "bridge"
+
+    # --- Agent loop (Claude) ---
+    anthropic_model: str = "claude-opus-4-8"
+    agent_effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
+    agent_max_iterations: int = 25
+    agent_max_output_tokens: int = 8192
 
     # --- Security & network plane ---
     credential_proxy_url: str = "http://localhost:8081"

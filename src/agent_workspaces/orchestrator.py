@@ -1,42 +1,34 @@
 """Orchestrator — composes the four planes into one workspace lifecycle.
 
 This is the spine of the system. It depends only on each plane's *interface*, so
-you can start with the in-memory/mock implementations and swap in real backends
-without touching this file.
+mocks and real backends are interchangeable.
 
-Lifecycle (see also the diagram in README.md):
+The lifecycle is streaming-first: `begin()` opens the trace and returns ids
+immediately (so a client can connect to the stream), then `run_lifecycle()` runs
+the whole thing in the background, emitting a trace event as each plane fires:
 
-    provision → branch data → secure → run → trace → recycle/destroy
+    control → data → security → execution → agent → teardown
+
+Every step publishes to the trace bus, so the frontend watches the planes light up
+and the agent work in real time.
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
 
 from .config import Settings, get_settings
 from .control.scheduler import Scheduler
 from .data.provisioner import DataPlane
 from .execution.sandbox import SandboxRuntime
-from .models import (
-    ExecutionResult,
-    Workspace,
-    WorkspaceId,
-    WorkspaceRequest,
-)
+from .models import ExecutionResult, Sandbox, TraceId, WorkspaceId, WorkspaceRequest
 from .security.isolation import SecurityPlane
 from .trace.recorder import TraceRecorder
-
-
-def _now() -> datetime:
-    return datetime.now(timezone.utc)
+from .trace.tracer import Tracer
 
 
 class Orchestrator:
-    """Wires the planes together. One instance per process is fine.
-
-    Each plane is injected so tests can pass mocks and prod can pass real backends.
-    """
+    """Wires the planes together. One instance per process is fine."""
 
     def __init__(
         self,
@@ -55,70 +47,82 @@ class Orchestrator:
         self.trace = trace
         self.settings = settings or get_settings()
 
-    async def create_workspace(self, request: WorkspaceRequest) -> Workspace:
-        """Assemble a ready-to-run workspace for `request`.
+    async def begin(self, request: WorkspaceRequest) -> tuple[WorkspaceId, TraceId]:
+        """Mint ids and open the trace. Cheap and fast — safe on the request path.
 
-        Order matters: acquire the sandbox, branch data and lock down the network
-        BEFORE the agent can touch anything, then hand it over.
+        Returns (workspace_id, trace_id) so the caller can hand the client a stream
+        URL before the (slow) lifecycle runs.
         """
         workspace_id: WorkspaceId = f"ws_{uuid.uuid4().hex[:12]}"
-
-        # 1. CONTROL: claim a warm sandbox or provision one on demand.
-        sandbox = await self.scheduler.acquire(request)
-
-        # 2. TRACE: open a trajectory before anything happens inside the sandbox.
         trace_id = await self.trace.start(workspace_id=workspace_id, request=request)
+        return workspace_id, trace_id
 
-        # 3. DATA: branch datasets from the read-only reference snapshot.
-        #    TODO: on failure here, we must release the sandbox back to the pool.
-        branch_ids = await self.data.branch(sandbox=sandbox, datasets=request.datasets)
+    async def run_lifecycle(
+        self, request: WorkspaceRequest, workspace_id: WorkspaceId, trace_id: TraceId
+    ) -> ExecutionResult | None:
+        """Assemble → run → tear down, emitting a trace event at every step.
 
-        # 4. SECURITY: attach the credential proxy and apply ingress/egress policy
-        #    BEFORE the agent runs. Nothing the agent does should precede this.
-        await self.security.secure(sandbox=sandbox, request=request)
-
-        # 5. EXECUTION: mount repos + tooling and attach the agent.
-        await self.runtime.attach(sandbox=sandbox, request=request)
-
-        return Workspace(
-            id=workspace_id,
-            request=request,
-            sandbox=sandbox,
-            trace_id=trace_id,
-            data_branch_ids=branch_ids,
-            created_at=_now(),
-        )
-
-    async def run(self, workspace: Workspace) -> ExecutionResult:
-        """Run the agent to completion inside an assembled workspace.
-
-        TODO: enforce `settings.sandbox_max_lifetime_seconds` as a hard timeout and
-        stream trace events (self.trace.record) as the agent produces them.
+        Ordering is a contract: the security plane must lock the sandbox down BEFORE
+        the agent runs; teardown must run even if an earlier step raises so we never
+        leak a sandbox, a data branch, a proxy identity, or a firewall rule.
         """
-        result = await self.runtime.run_agent(
-            sandbox=workspace.sandbox,
-            request=workspace.request,
-            trace_id=workspace.trace_id,
-        )
+        tracer = Tracer(self.trace, trace_id, workspace_id)
+        sandbox: Sandbox | None = None
+        branch_ids: list[str] = []
+        result: ExecutionResult | None = None
+
+        try:
+            # 1. CONTROL: claim a warm sandbox or provision one on demand.
+            sandbox = await self.scheduler.acquire(request)
+            await tracer.emit(
+                "plane.control", sandbox_id=sandbox.id, base_image=sandbox.base_image
+            )
+
+            # 2. DATA: branch datasets from the read-only reference snapshot.
+            branch_ids = await self.data.branch(sandbox=sandbox, datasets=request.datasets)
+            await tracer.emit("plane.data", branch_ids=branch_ids)
+
+            # 3. SECURITY: credential proxy + network policy, BEFORE the agent runs.
+            await self.security.secure(sandbox=sandbox, request=request)
+            await tracer.emit(
+                "plane.security",
+                egress=self.settings.egress_hosts + request.extra_egress_hosts,
+                credential_proxy=self.settings.credential_proxy_url,
+            )
+
+            # 4. EXECUTION: boot the environment, clone repos, attach the agent.
+            await self.runtime.attach(sandbox=sandbox, request=request)
+            await tracer.emit(
+                "plane.execution",
+                sandbox_id=sandbox.id,
+                repos=[r.url for r in request.repos],
+            )
+
+            # 5. Run the agent to completion (streams its own trace events).
+            result = await self.runtime.run_agent(
+                sandbox=sandbox, request=request, tracer=tracer
+            )
+            result.workspace_id = workspace_id
+        except Exception as exc:  # noqa: BLE001 — surface any failure into the trace
+            await tracer.emit("error", message=f"{type(exc).__name__}: {exc}")
+        finally:
+            # Teardown. TODO: run these concurrently and report individual failures
+            #                 instead of letting the first exception mask the rest.
+            await self.trace.finalize(trace_id)
+            if branch_ids:
+                await self.data.teardown(branch_ids)
+            if sandbox is not None:
+                await self.security.teardown(sandbox)
+                await self.runtime.destroy(sandbox)
+                await self.scheduler.release(sandbox)
+
         return result
 
-    async def destroy_workspace(self, workspace: Workspace) -> None:
-        """Tear everything down. Must be idempotent and safe to call after failures.
+    async def execute(self, request: WorkspaceRequest) -> ExecutionResult | None:
+        """Convenience: full begin → run → teardown, awaited to completion.
 
-        The sandbox is destroyed but its trace survives for replay/eval.
-        TODO: run these teardown steps even if earlier ones raise (gather + report),
-        so a single failure can't leak a sandbox, a data branch, or a proxy route.
+        Used by tests and any non-streaming caller. The streaming API instead calls
+        `begin()` then schedules `run_lifecycle()` in the background.
         """
-        await self.trace.finalize(workspace.trace_id)
-        await self.data.teardown(workspace.data_branch_ids)
-        await self.security.teardown(workspace.sandbox)
-        # CONTROL decides whether to recycle the sandbox into the warm pool or kill it.
-        await self.scheduler.release(workspace.sandbox)
-
-    async def execute(self, request: WorkspaceRequest) -> ExecutionResult:
-        """Convenience: full create → run → destroy, with guaranteed teardown."""
-        workspace = await self.create_workspace(request)
-        try:
-            return await self.run(workspace)
-        finally:
-            await self.destroy_workspace(workspace)
+        workspace_id, trace_id = await self.begin(request)
+        return await self.run_lifecycle(request, workspace_id, trace_id)

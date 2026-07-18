@@ -26,6 +26,22 @@ A fifth cross-cutting concern, **trace** (`trace/`), records every execution so 
 sandbox can be destroyed while its trajectory remains available for replay, debugging,
 and evaluation.
 
+## MVP status
+
+This scaffold ships a working vertical slice you can demo:
+
+- **Execution plane — real.** A Docker container per sandbox, a repo cloned into it,
+  and a **Claude agent loop** (`bash` tool → commands executed in the container).
+- **Trace plane — real.** Every step (plane transitions, agent messages, each command
+  and its output) is recorded and streamed live over WebSocket.
+- **Frontend — real.** A React "mission control" (`frontend/`) that launches a
+  workspace, lights up the four planes as they fire, and streams the agent's terminal.
+- **Control / Security / Data planes — still mocks** behind their interfaces. Implement
+  the `TODO:`s to make them real (warm pool timing, egress blocking, DB branching).
+
+Set `AWS_RUNTIME_BACKEND=mock` to run the entire lifecycle with **no Docker and no API
+key** — the mock execution plane still emits a trace, so the frontend works end-to-end.
+
 ## Lifecycle
 
 ```
@@ -46,32 +62,49 @@ swappable behind its interface.
 src/agent_workspaces/
 ├── config.py          # settings (pydantic-settings)
 ├── models.py          # shared domain models (Pydantic)
-├── orchestrator.py    # ties the four planes into one lifecycle
-├── main.py            # FastAPI app entrypoint
-├── api/               # HTTP routes for the control-plane API
+├── orchestrator.py    # streaming lifecycle: begin() + run_lifecycle()
+├── main.py            # FastAPI app + composition root (mock vs docker)
+├── api/routes.py      # POST /v1/workspaces:launch + WS /v1/traces/{id}/stream
 ├── control/           # Control plane  — scheduler, warm pool, intent
-├── execution/         # Execution plane — sandbox, runtime, filesystem, MCP
+├── execution/         # Execution plane — sandbox, runtime (docker), agent (Claude)
 ├── security/          # Security plane  — credential proxy, network, isolation
 ├── data/              # Data plane      — provisioner, branching, health
-└── trace/             # Execution trace recorder / replay
+└── trace/             # bus (pub/sub) · tracer · recorder
+
+frontend/              # React + Vite + TS + Tailwind mission-control UI
 ```
 
 ## Getting started
 
+**Backend** (Python 3.11+):
+
 ```bash
-# 1. Install (Python 3.11+)
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-
-# 2. Configure
 cp .env.example .env      # then edit
-
-# 3. Run the control-plane API
-make dev                  # uvicorn with reload
-
-# 4. Run the tests (they document expected behavior; most are skipped stubs)
-make test
+make dev                  # uvicorn on :8000 with reload
+make test                 # runs the mock-lifecycle + streaming tests
 ```
+
+**Frontend** (Node 18+):
+
+```bash
+cd frontend
+npm install
+npm run dev               # Vite dev server on :5173
+```
+
+### Run the live demo (real sandbox + agent)
+
+1. Start Docker (Desktop or `dockerd`) — the runtime pulls `python:3.11` on first run.
+2. Give the agent credentials: `export ANTHROPIC_API_KEY=...` (or `ant auth login`).
+3. In `.env`, set `AWS_RUNTIME_BACKEND=docker`.
+4. `make dev` (backend) and `npm run dev` (frontend), then open http://localhost:5173,
+   enter a task + a public repo, and hit **Launch**. Watch the planes light up and the
+   agent's commands stream into the terminal.
+
+No Docker or key handy? Set `AWS_RUNTIME_BACKEND=mock` — the whole flow (launch →
+stream → teardown) still runs; the execution plane just emits a canned trace.
 
 ## How to use this template
 

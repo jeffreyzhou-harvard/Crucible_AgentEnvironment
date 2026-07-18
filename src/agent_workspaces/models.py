@@ -116,6 +116,14 @@ class ExecutionResult(BaseModel):
     artifacts: dict[str, str] = Field(default_factory=dict)  # name -> URI
 
 
+class LaunchResponse(BaseModel):
+    """Returned immediately from the launch endpoint so the client can open the
+    trace stream while the agent runs in the background."""
+
+    workspace_id: WorkspaceId
+    trace_id: TraceId
+
+
 class TraceEvent(BaseModel):
     """One recorded step in an execution trajectory (command, tool call, output)."""
 
