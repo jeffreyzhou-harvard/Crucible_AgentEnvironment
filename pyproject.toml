@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-workspaces"
+version = "0.1.0"
+description = "A template for building sandbox environments where AI agents safely execute code."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "TODO" }
+# TODO: replace with your name and email.
+authors = [{ name = "Your Name", email = "you@example.com" }]
+
+dependencies = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    # TODO: add a real datastore client for the trace store (e.g. asyncpg / redis).
+    # TODO: add a container/VM runtime client for the execution plane (e.g. docker sdk).
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",          # for FastAPI TestClient / async client
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+[project.scripts]
+# `agent-workspaces` launches the control-plane API. See src/agent_workspaces/main.py
+agent-workspaces = "agent_workspaces.main:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_workspaces"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src"]

@@ -1,0 +1,47 @@
+# Local development scaffolding. This brings up the control-plane API plus the
+# backing services the DATA plane provisions per-run in production. In the real
+# system these are branched per sandbox (see data/branching.py); here they are
+# shared, long-lived containers so you can develop against something.
+#
+# TODO: this is a DEV convenience only. Do not model production data provisioning
+#       on this file — reproducibility comes from per-run branching, not a shared db.
+version: "3.9"
+
+services:
+  api:
+    build: .
+    command: uvicorn agent_workspaces.main:app --host 0.0.0.0 --port 8000
+    env_file: .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./src:/app/src   # TODO: remove bind mount for non-dev images
+
+  # Reference dataset store the data plane snapshots + branches from.
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: devonly            # TODO: never use a static password in prod
+      POSTGRES_DB: reference
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  # TODO: add the credential proxy service (security plane) — secrets terminate here,
+  #       never inside the sandbox. See security/credential_proxy.py.
+  # credential-proxy:
+  #   build: ./deploy/credential-proxy
+  #   ports: ["8081:8081"]
+
+volumes:
+  pgdata:
