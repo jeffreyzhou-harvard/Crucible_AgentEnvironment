@@ -63,10 +63,16 @@ class MockSecurityPlane(SecurityPlane):
         #   Which mechanisms apply depends on execution.runtime.RuntimeBackend.
 
     async def teardown(self, sandbox: Sandbox, tracer: Tracer | None = None) -> None:
-        # TODO: run both even if the first raises, and report failures — a leaked
-        #       proxy identity or firewall rule is a security incident, not a warning.
-        await self.network_policy.revoke(sandbox)
-        await self.credential_proxy.detach(sandbox)
+        # Run both even if the first raises — a leaked proxy identity or firewall
+        # rule is a security incident. Re-raise the first failure so it's surfaced.
+        errors: list[Exception] = []
+        for step in (self.network_policy.revoke(sandbox), self.credential_proxy.detach(sandbox)):
+            try:
+                await step
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+        if errors:
+            raise errors[0]
 
 
 class ProxyingSecurityPlane(SecurityPlane):
@@ -117,16 +123,18 @@ class ProxyingSecurityPlane(SecurityPlane):
             self.audit.set_callback(_stream)
 
     async def teardown(self, sandbox: Sandbox, tracer: Tracer | None = None) -> None:
-        # Best-effort, run-to-completion teardown: one failure must not skip the rest.
+        # Run-to-completion teardown: one failure must not skip the rest. Stop live
+        # streaming first, then revoke both; re-raise the first failure so the
+        # orchestrator can record it (a leaked rule/identity is an incident).
         self.audit.set_callback(None)
-        try:
-            await self.network_policy.revoke(sandbox)
-        except Exception:  # noqa: BLE001 — a leaked rule is an incident, not a crash
-            pass
-        try:
-            await self.credential_proxy.detach(sandbox)
-        except Exception:  # noqa: BLE001
-            pass
+        errors: list[Exception] = []
+        for step in (self.network_policy.revoke(sandbox), self.credential_proxy.detach(sandbox)):
+            try:
+                await step
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+        if errors:
+            raise errors[0]
 
     def shutdown(self) -> None:
         """Stop the shared proxy. Call on application shutdown."""

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from agent_workspaces.api.routes import get_app_settings
+from agent_workspaces.config import Settings
 from agent_workspaces.main import app
 
 
@@ -41,4 +43,26 @@ def test_launch_and_stream_trace() -> None:
     assert "agent.start" in kinds
     assert kinds[-1] == "workspace.end"
 
-    # TODO: add tests for auth/quota rejection once the launch endpoint enforces them.
+
+def test_launch_rejected_without_api_key_when_configured() -> None:
+    """When an API key is configured, launch endpoints require the X-API-Key header."""
+    app.dependency_overrides[get_app_settings] = lambda: Settings(api_key="s3cret")
+    try:
+        with TestClient(app) as client:
+            payload = {"agent_id": "a", "task_prompt": "t", "repos": [], "datasets": []}
+
+            # No key -> rejected.
+            assert client.post("/v1/workspaces:launch", json=payload).status_code == 401
+            # Wrong key -> rejected.
+            bad = client.post(
+                "/v1/workspaces:launch", json=payload, headers={"X-API-Key": "nope"}
+            )
+            assert bad.status_code == 401
+            # Correct key -> accepted.
+            ok = client.post(
+                "/v1/workspaces:launch", json=payload, headers={"X-API-Key": "s3cret"}
+            )
+            assert ok.status_code == 200
+            assert ok.json()["trace_id"].startswith("tr_")
+    finally:
+        app.dependency_overrides.clear()

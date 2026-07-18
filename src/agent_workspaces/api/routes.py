@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 
+from ..config import Settings, get_settings
 from ..experiment.runner import new_experiment_ids, run_experiment
 from ..models import (
     ExperimentLaunchResponse,
@@ -30,18 +31,38 @@ def get_orchestrator(request: Request) -> Orchestrator:
     return request.app.state.orchestrator  # type: ignore[no-any-return]
 
 
+def get_app_settings(request: Request) -> Settings:
+    return getattr(request.app.state, "settings", None) or get_settings()
+
+
+def require_api_key(
+    request: Request, settings: Settings = Depends(get_app_settings)
+) -> None:
+    """Reject callers when an API key is configured and not presented.
+
+    Open by default (empty `api_key`) for local dev; set `AWS_API_KEY` to require an
+    `X-API-Key` header on the launch endpoints.
+    """
+    if not settings.api_key:
+        return
+    provided = request.headers.get("x-api-key", "")
+    if provided != settings.api_key:
+        raise HTTPException(status_code=401, detail="invalid or missing API key")
+
+
 @router.post("/workspaces:launch", response_model=LaunchResponse)
 async def launch(
     body: WorkspaceRequest,
     request: Request,
     orchestrator: Orchestrator = Depends(get_orchestrator),
+    _: None = Depends(require_api_key),
 ) -> LaunchResponse:
     """Start a workspace and return its ids immediately.
 
     The lifecycle (provision → secure → run agent → tear down) runs in the
     background; connect to `/v1/traces/{trace_id}/stream` to watch it live.
     """
-    # TODO: authenticate the caller and enforce per-tenant quotas before launching.
+    # TODO: enforce per-tenant quotas here (auth is handled by require_api_key).
     workspace_id, trace_id = await orchestrator.begin(body)
 
     task = asyncio.create_task(orchestrator.run_lifecycle(body, workspace_id, trace_id))
@@ -71,6 +92,7 @@ async def launch_experiment(
     body: ExperimentRequest,
     request: Request,
     orchestrator: Orchestrator = Depends(get_orchestrator),
+    _: None = Depends(require_api_key),
 ) -> ExperimentLaunchResponse:
     """Start a best-of-N experiment and return its ids immediately.
 

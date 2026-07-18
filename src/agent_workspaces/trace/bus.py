@@ -17,26 +17,38 @@ from ..models import TraceEvent, TraceId
 
 
 class TraceBus:
-    def __init__(self) -> None:
+    def __init__(self, max_queue: int = 2000) -> None:
         self._history: dict[TraceId, list[TraceEvent]] = {}
         self._subscribers: dict[TraceId, set[asyncio.Queue[TraceEvent]]] = {}
         self._lock = asyncio.Lock()
+        self._max_queue = max_queue
 
     async def publish(self, event: TraceEvent) -> None:
         async with self._lock:
             self._history.setdefault(event.trace_id, []).append(event)
             subscribers = list(self._subscribers.get(event.trace_id, ()))
-        # Fan out outside the lock; unbounded queues so a slow client can't block
-        # the producer. TODO: bound the queue and drop/close truly stuck clients.
+        # Fan out outside the lock. Queues are bounded so a slow/stuck client can't
+        # grow memory without limit; on overflow we drop the OLDEST event for that
+        # client (it can always recover full history by reconnecting).
         for queue in subscribers:
-            queue.put_nowait(event)
+            try:
+                queue.put_nowait(event)
+            except asyncio.QueueFull:
+                try:
+                    queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+                try:
+                    queue.put_nowait(event)
+                except asyncio.QueueFull:
+                    pass
 
     async def subscribe(
         self, trace_id: TraceId
     ) -> tuple[list[TraceEvent], asyncio.Queue[TraceEvent]]:
         """Return (history_so_far, live_queue). Both captured under one lock so no
         event can slip between the snapshot and the subscription."""
-        queue: asyncio.Queue[TraceEvent] = asyncio.Queue()
+        queue: asyncio.Queue[TraceEvent] = asyncio.Queue(maxsize=self._max_queue)
         async with self._lock:
             history = list(self._history.get(trace_id, []))
             self._subscribers.setdefault(trace_id, set()).add(queue)

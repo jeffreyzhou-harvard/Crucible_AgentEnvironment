@@ -33,6 +33,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Iterable, Mapping
 
 from .audit import EgressAuditLog, EgressDecision
+from .policy import host_allowed
 
 # Hop-by-hop and client-supplied headers we refuse to forward upstream. We strip the
 # client's Authorization too: the ONLY credential that goes out is the one we inject.
@@ -98,15 +99,18 @@ class EgressProxy:
     def policy_for(
         self, host: str | None
     ) -> tuple[bool, str | None, tuple[str, int] | None, str | None]:
-        """Return (allowed, credential, backend_override, active_sandbox_id)."""
+        """Return (allowed, credential, backend_override, active_sandbox_id).
+
+        Allow/deny is decided by the shared `security.policy.host_allowed`, so the
+        proxy and the experiment fan-out use one definition of "is this host allowed".
+        """
         key = (host or "").lower()
         with self._lock:
-            return (
-                key in self._allowlist,
-                self._credentials.get(key),
-                self._host_overrides.get(key),
-                self._active_sandbox,
-            )
+            allowlist = set(self._allowlist)
+            credential = self._credentials.get(key)
+            backend = self._host_overrides.get(key)
+            sandbox = self._active_sandbox
+        return host_allowed(key, allowlist), credential, backend, sandbox
 
     @property
     def url(self) -> str:

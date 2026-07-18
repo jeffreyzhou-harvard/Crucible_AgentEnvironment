@@ -9,10 +9,24 @@ from __future__ import annotations
 
 import pytest
 
-from agent_workspaces.config import Settings
+from agent_workspaces.config import Settings, get_settings
 from agent_workspaces.main import build_orchestrator
 from agent_workspaces.models import DatasetSpec, RepoSpec, WorkspaceRequest
 from agent_workspaces.orchestrator import Orchestrator
+
+
+@pytest.fixture(autouse=True)
+def _force_mock_backends(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the suite hermetic and free: the module-level app reads the developer's
+    `.env` (which may select the Docker runtime + a real API key). Force mock
+    backends via env (precedence over `.env`) so tests never spin real containers
+    or call the Anthropic API."""
+    monkeypatch.setenv("AWS_RUNTIME_BACKEND", "mock")
+    monkeypatch.setenv("AWS_SECURITY_BACKEND", "mock")
+    monkeypatch.setenv("AWS_DATA_BRANCH_BACKEND", "mock")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture

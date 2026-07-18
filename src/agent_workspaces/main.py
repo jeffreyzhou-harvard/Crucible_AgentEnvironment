@@ -12,7 +12,9 @@ swap those in as you implement them.
 from __future__ import annotations
 
 import asyncio
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncIterator
 
 from fastapi import FastAPI
@@ -28,6 +30,31 @@ from .orchestrator import Orchestrator
 from .security.isolation import MockSecurityPlane, ProxyingSecurityPlane, SecurityPlane
 from .trace.bus import TraceBus
 from .trace.recorder import InMemoryTraceRecorder, TraceRecorder
+
+
+def _load_agent_credentials_from_dotenv() -> None:
+    """Make the Anthropic SDK's env vars available for local dev.
+
+    pydantic-settings loads `.env` into `Settings`, but the Anthropic client reads
+    ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN straight from the process environment.
+    We bridge only those (never overriding what's already exported), so `make dev`
+    picks up the key from `.env` without a manual `export`.
+    """
+    dotenv = Path(get_settings().model_config.get("env_file", ".env"))
+    if not dotenv.is_file():
+        return
+    wanted = {"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"}
+    for raw in dotenv.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        if key in wanted and key not in os.environ:
+            os.environ[key] = value.split(" #")[0].strip().strip('"').strip("'")
+
+
+_load_agent_credentials_from_dotenv()
 
 
 def build_orchestrator(settings: Settings | None = None, bus: TraceBus | None = None) -> Orchestrator:
@@ -70,25 +97,31 @@ def build_orchestrator(settings: Settings | None = None, bus: TraceBus | None = 
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     bus = TraceBus()
     app.state.trace_bus = bus
+    app.state.settings = get_settings()
     app.state.orchestrator = build_orchestrator(bus=bus)
     # Track background lifecycle tasks so they aren't garbage-collected mid-run.
     app.state.tasks = set()
     # TODO: start the warm-pool refill loop + demand predictor here for real speed.
     yield
+    # Cancel in-flight lifecycle/experiment tasks so shutdown doesn't strand them.
+    tasks: set[asyncio.Task] = app.state.tasks
+    for task in list(tasks):
+        task.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
     # Stop the shared egress proxy if the security plane started one.
     security = getattr(app.state.orchestrator, "security", None)
     shutdown = getattr(security, "shutdown", None)
     if callable(shutdown):
         shutdown()
-    # TODO: on shutdown, also cancel in-flight tasks and destroy every live sandbox.
+    # TODO: also destroy every still-live sandbox on shutdown (needs a live registry).
 
 
 app = FastAPI(title="agent-workspaces control plane", version="0.1.0", lifespan=lifespan)
 
-# TODO: lock CORS down to the deployed frontend origin. Open for local dev.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_settings().cors_origin_list,
     allow_methods=["*"],
     allow_headers=["*"],
 )

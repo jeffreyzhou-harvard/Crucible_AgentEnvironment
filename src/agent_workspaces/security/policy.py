@@ -17,8 +17,8 @@ from .audit import EgressDecision
 def host_allowed(host: str, allowlist: Iterable[str]) -> bool:
     """True if `host` is on the allowlist (exact match or a subdomain of an entry).
 
-    A slight superset of the proxy's exact-match rule (adds subdomain matching);
-    TODO: fold this back into EgressProxy.policy_for so there's literally one call site.
+    This is the single allow/deny rule: `EgressProxy.policy_for` (single-run) and the
+    experiment fan-out both call it, so there is one definition and no drift.
     """
     h = (host or "").strip().lower()
     allow = {a.strip().lower() for a in allowlist if a.strip()}

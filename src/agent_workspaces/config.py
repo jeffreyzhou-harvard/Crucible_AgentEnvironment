@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     api_host: str = "0.0.0.0"
     api_port: int = 8000
+    # Browser origins allowed to call the API (comma-separated). Defaults to the
+    # local Vite dev server; set to your deployed frontend origin in prod.
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    # Optional API key. Empty = open (local dev). When set, launch endpoints require
+    # a matching `X-API-Key` header.
+    api_key: str = ""
 
     # --- Control plane ---
     warm_pool_min_size: int = 2
@@ -77,6 +83,10 @@ class Settings(BaseSettings):
 
     # --- Trace store ---
     trace_store_uri: str = ""
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     @property
     def egress_hosts(self) -> list[str]:

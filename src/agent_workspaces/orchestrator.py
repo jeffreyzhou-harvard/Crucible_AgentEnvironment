@@ -16,6 +16,8 @@ and the agent work in real time.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Awaitable
+from typing import Any
 
 from .config import Settings, get_settings
 from .control.scheduler import Scheduler
@@ -107,15 +109,23 @@ class Orchestrator:
         except Exception as exc:  # noqa: BLE001 — surface any failure into the trace
             await tracer.emit("error", message=f"{type(exc).__name__}: {exc}")
         finally:
-            # Teardown. TODO: run these concurrently and report individual failures
-            #                 instead of letting the first exception mask the rest.
-            await self.trace.finalize(trace_id)
+            # Teardown runs to completion: one step failing must not skip the rest,
+            # or we leak a data branch, proxy identity, firewall rule, or sandbox.
+            # Each failure is surfaced into the trace; finalize() runs last so
+            # `workspace.end` stays the terminal event on the stream.
+            async def _safe(step: str, coro: Awaitable[Any]) -> None:
+                try:
+                    await coro
+                except Exception as exc:  # noqa: BLE001 — a leak is an incident, not a crash
+                    await tracer.emit("error", message=f"teardown[{step}]: {type(exc).__name__}: {exc}")
+
             if branch_ids:
-                await self.data.teardown(branch_ids)
+                await _safe("data", self.data.teardown(branch_ids))
             if sandbox is not None:
-                await self.security.teardown(sandbox, tracer=tracer)
-                await self.runtime.destroy(sandbox)
-                await self.scheduler.release(sandbox)
+                await _safe("security", self.security.teardown(sandbox, tracer=tracer))
+                await _safe("runtime", self.runtime.destroy(sandbox))
+                await _safe("scheduler", self.scheduler.release(sandbox))
+            await self.trace.finalize(trace_id)
 
         return result
 

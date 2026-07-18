@@ -14,6 +14,14 @@ from .branching import BranchingBackend, MockBranchingBackend
 from .health import HealthChecker, MockHealthChecker
 
 
+class DataPlaneError(RuntimeError):
+    """The data plane could not provision a reproducible starting state.
+
+    Raised so the orchestrator can release the sandbox and fail the run cleanly,
+    rather than letting the agent run against missing or unhealthy data.
+    """
+
+
 class DataPlane(abc.ABC):
     """Makes datasets available to a sandbox and reclaims them afterwards."""
 
@@ -56,13 +64,13 @@ class MockDataPlane(DataPlane):
             #       file) VIA the execution plane — coordinate ordering with attach().
             branch_ids.append(branch_id)
 
-        # Health-check BEFORE the agent is allowed to touch the data.
+        # Health-check BEFORE the agent is allowed to touch the data. On failure,
+        # discard the branches and raise so the orchestrator releases the sandbox
+        # instead of running blind against unhealthy data.
         healthy = await self.health.check(branch_ids)
         if not healthy:
-            # TODO: on failure, discard branches and raise a provisioning error so the
-            #       orchestrator can release the sandbox instead of running blind.
             await self.teardown(branch_ids)
-            raise RuntimeError("data plane health check failed")  # TODO: typed error
+            raise DataPlaneError("data plane health check failed")
         return branch_ids
 
     async def teardown(self, branch_ids: list[str]) -> None:
