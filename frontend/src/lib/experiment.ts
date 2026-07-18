@@ -5,7 +5,7 @@ const LOG_KINDS = new Set([
   "agent.message",
   "tool_call",
   "command_output",
-  "egress.request",
+  "security.egress", // unified egress event, shared with the single-run security plane
   "secretless.check",
 ]);
 
@@ -84,8 +84,8 @@ export function deriveExperiment(events: TraceEvent[]): ExperimentState {
         c.disqualified = (p.disqualified as boolean) ?? c.disqualified;
         c.reason = p.reason as string;
         break;
-      case "egress.request":
-        if (p.decision === "denied") c.egressDenied += 1;
+      case "security.egress":
+        if (p.allowed === false) c.egressDenied += 1;
         break;
     }
     if (LOG_KINDS.has(e.kind)) c.log.push(e);

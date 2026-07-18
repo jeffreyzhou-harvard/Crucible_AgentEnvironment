@@ -62,6 +62,22 @@ safety work:
 - **Isolation** — untrusted, self-generated code (including the grader's run of it)
   executes only inside network-disabled containers, never on the host.
 
+### One security model, two consumers
+
+The experiment and the single-run **security plane** (`security_backend=proxy`) share one
+egress model rather than reimplementing it:
+
+- **One policy** — `security/policy.py:host_allowed`, against one allowlist (`egress_hosts`).
+- **One event** — both stream `security.egress` (`{allowed, host, path, reason, credential_injected}`),
+  so the frontend has a single renderer.
+- **One audit** — experiment denials are recorded into the same `EgressAuditLog`, so
+  `GET /v1/security/egress-audit` shows single-run *and* experiment attempts together.
+
+The live proxy is single-tenant (one global allowlist), so N parallel candidates use
+per-candidate isolation (deny-all + policy-gated `web_fetch`) rather than routing through
+the shared proxy. TODO: a per-candidate proxy instance would give each candidate the full
+credential-injecting proxy path.
+
 Two backends, same event stream + dashboard:
 
 - **Scripted** (default, `AWS_RUNTIME_BACKEND=mock`) — a believable run with no Docker

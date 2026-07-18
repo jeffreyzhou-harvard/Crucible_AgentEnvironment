@@ -78,8 +78,13 @@ async def launch_experiment(
     live at `/v1/traces/{trace_id}/stream`.
     """
     experiment_id, trace_id = new_experiment_ids()
+    # Share the security plane's audit log so experiment egress attempts show up in
+    # GET /v1/security/egress-audit alongside single-run traffic (proxy backend only).
+    audit = getattr(orchestrator.security, "audit", None)
     task = asyncio.create_task(
-        run_experiment(orchestrator.trace, orchestrator.settings, body, experiment_id, trace_id)
+        run_experiment(
+            orchestrator.trace, orchestrator.settings, body, experiment_id, trace_id, audit=audit
+        )
     )
     tasks: set = request.app.state.tasks
     tasks.add(task)

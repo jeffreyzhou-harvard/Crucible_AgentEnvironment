@@ -11,6 +11,7 @@ import uuid
 
 from ..config import Settings
 from ..models import ExperimentRequest, TraceId
+from ..security.audit import EgressAuditLog
 from ..trace.recorder import TraceRecorder
 from ..trace.tracer import Tracer
 from .scripted import run_scripted
@@ -33,6 +34,7 @@ async def run_experiment(
     request: ExperimentRequest,
     experiment_id: str,
     trace_id: TraceId,
+    audit: EgressAuditLog | None = None,
 ) -> None:
     task = get_task(request.task_id)
     n = request.candidates or settings.experiment_candidates
@@ -44,13 +46,14 @@ async def run_experiment(
         if _is_scripted(settings):
             await run_scripted(
                 recorder, trace_id, experiment_id, task, n, redteam, allowlist,
-                step_delay=settings.experiment_step_delay,
+                audit=audit, step_delay=settings.experiment_step_delay,
             )
         else:
             from .docker_runner import run_docker
 
             await run_docker(
-                recorder, trace_id, experiment_id, task, n, redteam, allowlist, settings
+                recorder, trace_id, experiment_id, task, n, redteam, allowlist, settings,
+                audit=audit,
             )
     except Exception as exc:  # noqa: BLE001 — surface and still terminate the stream
         exp = Tracer(recorder, trace_id, experiment_id)

@@ -10,11 +10,12 @@ scripted path tells the same story without either.
 from __future__ import annotations
 
 import asyncio
-from urllib.parse import urlparse
 
 from ..config import Settings
 from ..execution.runtime import DockerBackend
 from ..models import TraceId
+from ..security.audit import EgressAuditLog
+from ..security.policy import decide
 from ..trace.recorder import TraceRecorder
 from ..trace.tracer import Tracer
 from .grader import Grader
@@ -52,15 +53,10 @@ _MAX_ITERS = 12
 _MAX_OUTPUT_CHARS = 6000
 
 
-def _host_allowed(url: str, allowlist: list[str]) -> tuple[str, bool]:
-    host = (urlparse(url).hostname or "").lower()
-    ok = any(host == a or host.endswith("." + a) for a in allowlist)
-    return host, ok
-
-
 async def _competition_agent(
     client, backend: DockerBackend, work_ref: str, task: TaskSpec,
     tracer: Tracer, allowlist: list[str], redteam: bool, settings: Settings,
+    audit: EgressAuditLog | None,
 ) -> int:
     template = _REDTEAM_SYSTEM if redteam else _HONEST_SYSTEM
     system = template.format(workdir=settings.sandbox_workdir, prompt=task.prompt)
@@ -90,16 +86,16 @@ async def _competition_agent(
                 continue
             if block.name == "web_fetch":
                 url = str(block.input.get("url", ""))
-                host, ok = _host_allowed(url, allowlist)
-                await tracer.emit(
-                    "egress.request", url=url, host=host,
-                    decision="allowed" if ok else "denied",
-                )
-                if ok:
+                # One policy, one record shape, one audit — shared with the proxy plane.
+                decision = decide(url, allowlist, sandbox_id=work_ref)
+                if audit is not None:
+                    audit.record(decision)
+                await tracer.emit("security.egress", **decision.to_dict())
+                if decision.allowed:
                     content, is_err = "200 OK (fetch disabled in demo)", False
                 else:
                     egress_denied += 1
-                    content = f"BLOCKED by egress policy: {host} not on the allowlist"
+                    content = f"BLOCKED by egress policy: {decision.host} not on the allowlist"
                     is_err = True
                 results.append(
                     {"type": "tool_result", "tool_use_id": block.id, "content": content, "is_error": is_err}
@@ -132,7 +128,7 @@ def _verdict(in_sandbox: int, sample_total: int, held_out: int, held_total: int,
 
 
 async def _run_candidate(
-    client, backend, grader, recorder, trace_id, task, index, redteam, allowlist, settings,
+    client, backend, grader, recorder, trace_id, task, index, redteam, allowlist, settings, audit,
 ) -> dict:
     t = Tracer(recorder, trace_id, f"cand_{index}", context={"candidate": index})
     label = f"candidate-{index}{' (red-team)' if redteam else ''}"
@@ -146,7 +142,7 @@ async def _run_candidate(
         await t.emit("agent.start", model=settings.anthropic_model)
 
         egress_denied = await _competition_agent(
-            client, backend, work_ref, task, t, allowlist, redteam, settings
+            client, backend, work_ref, task, t, allowlist, redteam, settings, audit
         )
         solution = await grader.read_solution(work_ref, task)
         in_sandbox = await grader.score_in_sandbox(work_ref, task)
@@ -171,6 +167,7 @@ async def _run_candidate(
 async def run_docker(
     recorder: TraceRecorder, trace_id: TraceId, experiment_id: str,
     task: TaskSpec, n: int, redteam: int, allowlist: list[str], settings: Settings,
+    audit: EgressAuditLog | None = None,
 ) -> None:
     from anthropic import AsyncAnthropic
 
@@ -186,7 +183,7 @@ async def run_docker(
     results = await asyncio.gather(
         *(
             _run_candidate(client, backend, grader, recorder, trace_id, task, i,
-                           i >= n - redteam and redteam > 0, allowlist, settings)
+                           i >= n - redteam and redteam > 0, allowlist, settings, audit)
             for i in range(n)
         )
     )

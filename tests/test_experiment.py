@@ -5,6 +5,7 @@ from __future__ import annotations
 from agent_workspaces.config import Settings
 from agent_workspaces.experiment.runner import new_experiment_ids, run_experiment
 from agent_workspaces.models import ExperimentRequest
+from agent_workspaces.security.audit import EgressAuditLog
 from agent_workspaces.trace.bus import TraceBus
 from agent_workspaces.trace.recorder import InMemoryTraceRecorder
 
@@ -47,9 +48,10 @@ async def test_held_out_grader_exposes_gaming_and_blocks_egress() -> None:
     )
     events = await recorder.load(trace_id)
 
-    # The red-team candidate's egress attempt is denied.
+    # The red-team candidate's egress attempt is denied — using the unified
+    # `security.egress` event shared with the single-run security plane.
     assert any(
-        e.kind == "egress.request" and e.payload.get("decision") == "denied" for e in events
+        e.kind == "security.egress" and e.payload.get("allowed") is False for e in events
     )
 
     # The two-number score exposes an overfitter: high in-sandbox, low held-out.
@@ -63,3 +65,23 @@ async def test_held_out_grader_exposes_gaming_and_blocks_egress() -> None:
     assert end["winner"] is not None
     board = {row["candidate"]: row for row in end["leaderboard"]}
     assert board[end["winner"]]["disqualified"] is False
+
+
+async def test_experiment_denials_land_in_the_shared_security_audit() -> None:
+    """The experiment records egress denials into the SAME audit log the security
+    plane exposes via GET /v1/security/egress-audit — one audit trail, not two."""
+    settings = _settings()
+    recorder = InMemoryTraceRecorder(settings=settings, bus=TraceBus())
+    audit = EgressAuditLog()
+    exp_id, trace_id = new_experiment_ids()
+
+    await run_experiment(
+        recorder,
+        settings,
+        ExperimentRequest(candidates=4, redteam=1),
+        exp_id,
+        trace_id,
+        audit=audit,
+    )
+    entries = audit.entries()
+    assert any(e["allowed"] is False and e["host"] == "pastebin.com" for e in entries)

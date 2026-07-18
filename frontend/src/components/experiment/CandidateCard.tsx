@@ -30,11 +30,14 @@ function LogLine({ event }: { event: TraceEvent }) {
         </div>
       );
     }
-    case "egress.request":
-      return p.decision === "denied" ? (
-        <div className="text-rose-400">⛔ egress DENIED · {s(p.host)}</div>
+    case "security.egress":
+      return p.allowed === false ? (
+        <div className="text-rose-400">⛔ egress BLOCK · {s(p.host)} · {s(p.reason)}</div>
       ) : (
-        <div className="text-zinc-500">🌐 egress allowed · {s(p.host)}</div>
+        <div className="text-zinc-500">
+          ⇅ egress ALLOW · {s(p.host)}
+          {p.credential_injected === true ? " · credential injected" : ""}
+        </div>
       );
     case "secretless.check":
       return <div className="text-amber-400">🔒 secretless · {s(p.sample)}</div>;
