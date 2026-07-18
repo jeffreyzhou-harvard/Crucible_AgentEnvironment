@@ -48,9 +48,21 @@ class Settings(BaseSettings):
     agent_max_output_tokens: int = 8192
 
     # --- Security & network plane ---
+    # "mock" logs intent and enforces nothing; "proxy" runs a real secretless egress
+    # proxy that allowlists destinations and injects credentials on the way out.
+    security_backend: Literal["mock", "proxy"] = "mock"
     credential_proxy_url: str = "http://localhost:8081"
     egress_allowlist: str = ""  # comma-separated; parse via `egress_hosts`
     ingress_allowlist: str = ""
+    # Where the egress proxy binds. 0.0.0.0 so sandbox containers can reach it via
+    # the host gateway. The advertised URL is `credential_proxy_url` above.
+    egress_proxy_host: str = "0.0.0.0"
+    egress_proxy_port: int = 8081
+    # Append-only JSONL audit of every allow/block decision. Empty = in-memory only.
+    egress_audit_log: str = ""
+    # Credentials injected at egress, keyed by host: "host=token,host2=token2".
+    # These live ONLY in the proxy (control plane); they never enter the sandbox.
+    proxy_credential_map: str = ""
 
     # --- Data plane ---
     dataset_snapshot_uri: str = ""
@@ -66,6 +78,16 @@ class Settings(BaseSettings):
     @property
     def ingress_hosts(self) -> list[str]:
         return [h.strip() for h in self.ingress_allowlist.split(",") if h.strip()]
+
+    @property
+    def proxy_credentials(self) -> dict[str, str]:
+        """Parse `proxy_credential_map` ("host=token,...") into {host: token}."""
+        creds: dict[str, str] = {}
+        for pair in self.proxy_credential_map.split(","):
+            host, sep, token = pair.partition("=")
+            if sep and host.strip() and token.strip():
+                creds[host.strip().lower()] = token.strip()
+        return creds
 
 
 @lru_cache

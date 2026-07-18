@@ -83,7 +83,8 @@ class Orchestrator:
             await tracer.emit("plane.data", branch_ids=branch_ids)
 
             # 3. SECURITY: credential proxy + network policy, BEFORE the agent runs.
-            await self.security.secure(sandbox=sandbox, request=request)
+            #    Pass the tracer so the plane can stream egress decisions live.
+            await self.security.secure(sandbox=sandbox, request=request, tracer=tracer)
             await tracer.emit(
                 "plane.security",
                 egress=self.settings.egress_hosts + request.extra_egress_hosts,
@@ -112,7 +113,7 @@ class Orchestrator:
             if branch_ids:
                 await self.data.teardown(branch_ids)
             if sandbox is not None:
-                await self.security.teardown(sandbox)
+                await self.security.teardown(sandbox, tracer=tracer)
                 await self.runtime.destroy(sandbox)
                 await self.scheduler.release(sandbox)
 

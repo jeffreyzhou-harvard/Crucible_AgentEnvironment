@@ -11,6 +11,7 @@ import abc
 
 from ..config import Settings
 from ..models import Sandbox, WorkspaceRequest
+from .proxy_server import EgressProxy
 
 
 class NetworkPolicy(abc.ABC):
@@ -48,3 +49,24 @@ class MockNetworkPolicy(NetworkPolicy):
 
     async def revoke(self, sandbox: Sandbox) -> None:
         return None
+
+
+class AllowlistNetworkPolicy(NetworkPolicy):
+    """Programs the egress allowlist on the shared :class:`EgressProxy`.
+
+    Enforcement lives in the proxy, which the sandbox cannot bypass (it is the box's
+    only route out), rather than in-sandbox iptables the agent could tamper with.
+    The effective allowlist is the global one plus any per-request extra hosts.
+    """
+
+    def __init__(self, settings: Settings, proxy: EgressProxy) -> None:
+        self.settings = settings
+        self.proxy = proxy
+
+    async def apply(self, sandbox: Sandbox, request: WorkspaceRequest) -> None:
+        effective = self.settings.egress_hosts + request.extra_egress_hosts
+        self.proxy.set_allowlist(effective)
+
+    async def revoke(self, sandbox: Sandbox) -> None:
+        # Deny-all once the run is over. Idempotent.
+        self.proxy.set_allowlist([])
