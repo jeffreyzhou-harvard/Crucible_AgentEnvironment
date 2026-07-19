@@ -7,7 +7,7 @@ import { Card, CardContent } from "../components/ui/card";
 import { Reveal } from "../components/Reveal";
 import logoUrl from "../assets/CrucibleLogo.png";
 
-const REPO = "https://github.com/jeffreyzhou-harvard/AutoResearchEnvironment";
+const REPO = "https://github.com/jeffreyzhou-harvard/Crucible_AgentEnvironment";
 const CONCEPT = "https://neosigma.ai/blog/agent-workspaces";
 
 // Numbered section header: the "01 / 02" pattern keeps sections scannable.
