@@ -176,4 +176,4 @@ Crucible's design is inspired by [NeoSigma's *Agent Workspaces*](https://neosigm
 
 ## License
 
-License TBD. A `LICENSE` file will be added before the first tagged release.
+Released under the [MIT License](LICENSE).

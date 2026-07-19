@@ -8,9 +8,12 @@ version = "0.1.0"
 description = "A template for building sandbox environments where AI agents safely execute code."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "TODO" }
-# TODO: replace with your name and email.
-authors = [{ name = "Your Name", email = "you@example.com" }]
+license = { text = "MIT" }
+authors = [
+    { name = "Jeffrey Zhou" },
+    { name = "Femi Ositade" },
+    { name = "Michael Zuo" },
+]
 
 dependencies = [
     "fastapi>=0.111",
