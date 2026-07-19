@@ -12,5 +12,6 @@ RUN pip install --no-cache-dir -e .
 
 EXPOSE 8000
 
+# Bind to $PORT when the platform injects one (Railway/Render/Fly); default to 8000 locally.
 # TODO: run as a non-root user; drop capabilities.
-CMD ["uvicorn", "agent_workspaces.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn agent_workspaces.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
