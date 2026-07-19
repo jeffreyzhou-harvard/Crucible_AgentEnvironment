@@ -46,7 +46,7 @@ export default function Console() {
           <p className="text-xs text-zinc-500 group-hover:text-zinc-400">← back to home</p>
         </Link>
         <div className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 p-1">
-          {tab("experiment", "Best-of-N")}
+          {tab("experiment", "AI face-off")}
           {tab("single", "Single run")}
         </div>
       </header>

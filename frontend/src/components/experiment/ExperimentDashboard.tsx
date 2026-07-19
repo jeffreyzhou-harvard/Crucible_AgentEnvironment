@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTrace } from "../../hooks/useTrace";
 import { deriveExperiment } from "../../lib/experiment";
-import type { StreamStatus } from "../../types";
+import type { CandidateState, ExperimentState, StreamStatus } from "../../types";
+import { cn } from "../../lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -9,6 +10,7 @@ import { Card, CardContent } from "../ui/card";
 import { Skeleton } from "../ui/skeleton";
 import { CandidateCard } from "./CandidateCard";
 import { Leaderboard } from "./Leaderboard";
+import { SimpleDashboard } from "./SimpleDashboard";
 
 const STATUS_LABEL: Record<StreamStatus, string> = {
   idle: "idle",
@@ -18,6 +20,8 @@ const STATUS_LABEL: Record<StreamStatus, string> = {
   error: "stream error",
 };
 
+type View = "plain" | "technical";
+
 export function ExperimentDashboard({
   traceId,
   onReset,
@@ -26,6 +30,7 @@ export function ExperimentDashboard({
   onReset: () => void;
 }) {
   const { events, status } = useTrace(traceId);
+  const [view, setView] = useState<View>("plain");
   const exp = useMemo(() => deriveExperiment(events), [events]);
   const cands = useMemo(
     () => Object.values(exp.cands).sort((a, b) => a.index - b.index),
@@ -66,10 +71,57 @@ export function ExperimentDashboard({
             {exp.candidates} candidates · {exp.mode}
           </span>
         </div>
-        <Button variant="outline" onClick={onReset}>
-          New run
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/60 p-1">
+            {(["plain", "technical"] as View[]).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                  view === v ? "bg-zinc-800 text-zinc-100" : "text-zinc-500 hover:text-zinc-300",
+                )}
+              >
+                {v === "plain" ? "Plain English" : "Technical"}
+              </button>
+            ))}
+          </div>
+          <Button variant="outline" onClick={onReset}>
+            New run
+          </Button>
+        </div>
       </div>
+
+      {view === "plain" ? (
+        <SimpleDashboard exp={exp} cands={cands} live={status !== "done"} />
+      ) : (
+        <TechnicalView
+          exp={exp}
+          cands={cands}
+          hashes={hashes}
+          identical={identical}
+          egressBlocked={egressBlocked}
+        />
+      )}
+    </div>
+  );
+}
+
+function TechnicalView({
+  exp,
+  cands,
+  hashes,
+  identical,
+  egressBlocked,
+}: {
+  exp: ExperimentState;
+  cands: CandidateState[];
+  hashes: (string | undefined)[];
+  identical: boolean;
+  egressBlocked: CandidateState[];
+}) {
+  return (
+    <div className="space-y-4">
 
       {/* Reproducibility receipt — the copy-on-write "identical world" proof. */}
       {hashes.length > 0 && (

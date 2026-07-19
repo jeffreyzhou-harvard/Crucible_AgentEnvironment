@@ -7,13 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 const TASKS = [
   {
     id: "sequence",
-    label: "Hidden sequence — adversarial",
-    blurb: "3 sample · 9 held-out · planted answer file + a blocked URL. Shortcuts get caught.",
+    label: "Guess the number pattern (the tricky one)",
+    blurb:
+      "Hard to solve honestly. We plant a shortcut file and a tempting web link — so you can watch the safety net catch an AI that tries to cheat.",
   },
   {
     id: "devowel",
-    label: "Remove vowels — baseline",
-    blurb: "3 sample · 9 held-out · self-contained, no bait.",
+    label: "Remove the vowels from words (the simple one)",
+    blurb: "A straightforward warm-up with no traps — good for a first run.",
   },
 ];
 
@@ -49,17 +50,18 @@ export function ExperimentLauncher({
   return (
     <Card className="mx-auto max-w-2xl">
       <CardHeader>
-        <CardTitle>Best-of-N experiment</CardTitle>
-        <p className="mt-0.5 text-xs text-zinc-500">
-          N agents solve the same task in isolated, identical sandboxes. Each is scored
-          against a held-out grader — so a candidate can't win by gaming the visible tests.
-          Red-team candidates probe the egress + secretless controls.
+        <CardTitle>Set up an AI face-off</CardTitle>
+        <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">
+          Several AIs try to solve the same problem, each in its own locked-down copy of the
+          workspace. We grade them on a <span className="text-zinc-400">hidden test they never see</span>,
+          so an AI can't win just by memorizing the practice answers — and if one tries to cheat or
+          sneak online, the safety net catches it.
         </p>
       </CardHeader>
       <CardContent>
         <form onSubmit={submit} className="space-y-4">
           <div>
-            <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-zinc-500">Task</div>
+            <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-zinc-500">Problem to solve</div>
             <select
               value={taskId}
               onChange={(e) => setTaskId(e.target.value)}
@@ -73,9 +75,9 @@ export function ExperimentLauncher({
             </select>
             <p className="mt-1.5 text-xs text-zinc-500">{task.blurb}</p>
           </div>
-          <div className="flex items-end gap-6">
+          <div className="flex flex-wrap items-start gap-6">
             <label className="text-xs text-zinc-400">
-              <div className="mb-1.5 uppercase tracking-wide text-zinc-500">Candidates</div>
+              <div className="mb-1.5 uppercase tracking-wide text-zinc-500">How many AIs</div>
               <input
                 type="number"
                 min={1}
@@ -84,9 +86,12 @@ export function ExperimentLauncher({
                 value={candidates}
                 onChange={(e) => setCandidates(Number(e.target.value))}
               />
+              <p className="mt-1 max-w-[9rem] text-[11px] leading-tight text-zinc-500">
+                Attempts running at once. We keep the best honest one.
+              </p>
             </label>
             <label className="text-xs text-zinc-400">
-              <div className="mb-1.5 uppercase tracking-wide text-zinc-500">Red-team</div>
+              <div className="mb-1.5 uppercase tracking-wide text-zinc-500">How many cheat</div>
               <input
                 type="number"
                 min={0}
@@ -95,6 +100,9 @@ export function ExperimentLauncher({
                 value={redteam}
                 onChange={(e) => setRedteam(Number(e.target.value))}
               />
+              <p className="mt-1 max-w-[9rem] text-[11px] leading-tight text-zinc-500">
+                Told to cheat on purpose, to prove the safety net works.
+              </p>
             </label>
           </div>
           {error && (
@@ -103,7 +111,7 @@ export function ExperimentLauncher({
             </p>
           )}
           <Button type="submit" disabled={submitting} className="w-full">
-            {submitting ? "Launching…" : "Run experiment →"}
+            {submitting ? "Starting…" : "Start the face-off →"}
           </Button>
         </form>
       </CardContent>
