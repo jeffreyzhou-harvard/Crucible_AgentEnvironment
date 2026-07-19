@@ -62,8 +62,9 @@ class DockerBackend(RuntimeBackend):
             try:
                 self.client.images.get(base_image)
             except self._docker.errors.ImageNotFound:
-                # Cold start on a missing image. TODO: pre-pull into the warm pool
-                # so this latency never lands on the request path.
+                # Image miss: pull on demand. The warm pool calls this method
+                # off the request path, so with warm sandboxes flowing this
+                # latency never lands on a user's launch.
                 self.client.images.pull(base_image)
             container = self.client.containers.run(
                 base_image,
@@ -73,13 +74,32 @@ class DockerBackend(RuntimeBackend):
                 network_mode=net,  # per-call override; "none" for experiments = deny-all
                 environment=self._proxy_env(),
                 extra_hosts=self._extra_hosts(),
-                # TODO (security plane): drop capabilities, read-only rootfs where
-                # possible, cgroup limits, non-root user, seccomp/AppArmor profile.
+                **self._hardening(),
             )
             container.exec_run(["mkdir", "-p", self.settings.sandbox_workdir])
             return str(container.id)
 
         return await asyncio.to_thread(_run)
+
+    def _hardening(self) -> dict[str, Any]:
+        """Container hardening flags (security plane, enforced by the runtime).
+
+        Dropping every capability + no-new-privileges shuts down the classic
+        container-escape ladder; the cgroup limits stop one sandbox from
+        starving the host. The rootfs stays writable (agents install packages)
+        — a read-only root + tmpfs workdir is the next notch when tasks allow.
+        A container still shares the host kernel: for hostile-by-design code,
+        pair with gVisor/Kata or a microVM backend (see the classes below).
+        """
+        if not self.settings.sandbox_harden:
+            return {}
+        return {
+            "cap_drop": ["ALL"],
+            "security_opt": ["no-new-privileges:true"],
+            "mem_limit": self.settings.sandbox_mem_limit,
+            "pids_limit": self.settings.sandbox_pids_limit,
+            "nano_cpus": self.settings.sandbox_nano_cpus,
+        }
 
     def _proxy_env(self) -> dict[str, str]:
         """When the proxy security plane is active, force ALL container egress

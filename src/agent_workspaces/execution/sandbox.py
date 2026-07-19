@@ -80,7 +80,11 @@ class DockerSandboxRuntime(SandboxRuntime):
         self.agent = ClaudeAgent(settings, self.backend)
 
     async def attach(self, sandbox: Sandbox, request: WorkspaceRequest) -> None:
-        sandbox.runtime_ref = await self.backend.restore_from_snapshot(sandbox.base_image)
+        # Warm-pool hit: the container was booted ahead of demand, so attach is
+        # a pointer swap. Cold path: boot it now (this is the latency the warm
+        # pool exists to hide).
+        if sandbox.runtime_ref is None:
+            sandbox.runtime_ref = await self.backend.restore_from_snapshot(sandbox.base_image)
         sandbox.state = SandboxState.RUNNING
 
         # Clone requested repos into the workdir. Public repos only for now.

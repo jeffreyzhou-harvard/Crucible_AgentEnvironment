@@ -92,6 +92,25 @@ class Sandbox(BaseModel):
     # Opaque, backend-specific address the execution plane uses to attach
     # (e.g. a container id, a VM socket, a k8s pod name).
     runtime_ref: str | None = None
+    # True when this sandbox was claimed pre-provisioned from the warm pool —
+    # the control plane's speed receipt, surfaced in the trace and the UI.
+    warm_hit: bool = False
+
+
+class DataBranch(BaseModel):
+    """One copy-on-write branch of a reference dataset, private to a run.
+
+    `content_hash` is the reproducibility receipt: the hash of the branch's
+    starting state, provably identical to the reference snapshot (and to every
+    sibling branch) before the agent touches it.
+    """
+
+    id: str
+    dataset: str = ""
+    kind: str = ""
+    path: str | None = None  # where the branch is materialized (backend-specific)
+    source: str | None = None  # the reference snapshot this branch came from
+    content_hash: str | None = None
 
 
 class Workspace(BaseModel):

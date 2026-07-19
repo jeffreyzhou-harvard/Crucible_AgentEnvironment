@@ -10,6 +10,16 @@ interface PlaneDef {
   detail: (payload: Record<string, unknown>) => string;
 }
 
+function fmtMs(v: unknown): string | null {
+  if (typeof v !== "number") return null;
+  return v >= 1000 ? `${(v / 1000).toFixed(1)}s` : `${Math.round(v)}ms`;
+}
+
+interface BranchReceipt {
+  id?: string;
+  content_hash?: string | null;
+}
+
 const PLANES: PlaneDef[] = [
   {
     kind: "plane.control",
@@ -17,7 +27,11 @@ const PLANES: PlaneDef[] = [
     sub: "warm pool · scheduler",
     optimizes: "speed",
     active: "border-sky-500/60 bg-sky-500/10",
-    detail: (p) => `sandbox ${String(p.sandbox_id ?? "").slice(0, 14)}`,
+    detail: (p) => {
+      const ms = fmtMs(p.acquire_ms);
+      const how = p.warm_hit === true ? "warm hit" : "cold start";
+      return ms ? `${how} · ${ms}` : `sandbox ${String(p.sandbox_id ?? "").slice(0, 14)}`;
+    },
   },
   {
     kind: "plane.data",
@@ -25,7 +39,13 @@ const PLANES: PlaneDef[] = [
     sub: "copy-on-write branch",
     optimizes: "reproducibility",
     active: "border-violet-500/60 bg-violet-500/10",
-    detail: (p) => `${(p.branch_ids as unknown[] | undefined)?.length ?? 0} branch(es)`,
+    detail: (p) => {
+      const branches = (p.branches as BranchReceipt[] | undefined) ?? [];
+      const n = branches.length || ((p.branch_ids as unknown[] | undefined)?.length ?? 0);
+      const hash = branches.find((b) => b.content_hash)?.content_hash;
+      // The hash is the reproducibility receipt: identical world, proven.
+      return hash ? `${n} branch(es) · world ${hash.slice(0, 8)} ✓` : `${n} branch(es)`;
+    },
   },
   {
     kind: "plane.security",
@@ -41,7 +61,11 @@ const PLANES: PlaneDef[] = [
     sub: "docker · repos · agent",
     optimizes: "fidelity",
     active: "border-emerald-500/60 bg-emerald-500/10",
-    detail: (p) => `${(p.repos as unknown[] | undefined)?.length ?? 0} repo(s)`,
+    detail: (p) => {
+      const repos = (p.repos as unknown[] | undefined)?.length ?? 0;
+      const ms = fmtMs(p.attach_ms);
+      return ms ? `${repos} repo(s) · attach ${ms}` : `${repos} repo(s)`;
+    },
   },
 ];
 

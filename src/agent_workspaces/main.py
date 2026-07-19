@@ -22,14 +22,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .api.routes import router
 from .config import Settings, get_settings
-from .control.scheduler import InMemoryScheduler, Scheduler
+from .control.intent import IntentPredictor
+from .control.scheduler import DemandPredictor, InMemoryScheduler, Scheduler
 from .control.warm_pool import WarmPool
-from .data.provisioner import DataPlane, MockDataPlane
+from .data.provisioner import CowDataPlane, DataPlane, MockDataPlane
 from .execution.sandbox import DockerSandboxRuntime, MockSandboxRuntime, SandboxRuntime
 from .orchestrator import Orchestrator
 from .security.isolation import MockSecurityPlane, ProxyingSecurityPlane, SecurityPlane
 from .trace.bus import TraceBus
-from .trace.recorder import InMemoryTraceRecorder, TraceRecorder
+from .trace.recorder import InMemoryTraceRecorder, JsonlTraceRecorder, TraceRecorder
 
 
 def _load_agent_credentials_from_dotenv() -> None:
@@ -61,12 +62,13 @@ def build_orchestrator(settings: Settings | None = None, bus: TraceBus | None = 
     """Pick concrete backends per settings and wire them up.
 
     EXECUTION: real Docker runtime when AWS_RUNTIME_BACKEND=docker, else mock.
-    CONTROL / SECURITY / DATA: still mocks in the MVP — implement and swap here.
+    CONTROL:   real runtime-backed warm pool (boots containers ahead of demand
+               under docker) + EWMA demand predictor + intent predictor.
+    SECURITY:  real egress proxy when AWS_SECURITY_BACKEND=proxy, else mock.
+    DATA:      real CoW branching when AWS_DATA_BRANCH_BACKEND=cow, else mock.
+    TRACE:     durable JSONL store when AWS_TRACE_STORE_URI is set, else memory.
     """
     settings = settings or get_settings()
-
-    warm_pool = WarmPool(settings=settings)
-    scheduler: Scheduler = InMemoryScheduler(warm_pool=warm_pool, settings=settings)
 
     runtime: SandboxRuntime
     if settings.runtime_backend == "docker":
@@ -74,14 +76,37 @@ def build_orchestrator(settings: Settings | None = None, bus: TraceBus | None = 
     else:
         runtime = MockSandboxRuntime(settings=settings)
 
+    # The warm pool boots real environments ahead of demand when the runtime
+    # can (docker); with the mock runtime it models the same lifecycle.
+    docker_runtime = runtime if isinstance(runtime, DockerSandboxRuntime) else None
+    predictor = DemandPredictor(settings=settings)
+    warm_pool = WarmPool(
+        settings=settings,
+        boot=docker_runtime.backend.restore_from_snapshot if docker_runtime else None,
+        destroy=docker_runtime.backend.destroy if docker_runtime else None,
+        target_fn=predictor.predict,
+    )
+    scheduler: Scheduler = InMemoryScheduler(
+        warm_pool=warm_pool, settings=settings, predictor=predictor
+    )
+
     security: SecurityPlane
     if settings.security_backend == "proxy":
         security = ProxyingSecurityPlane(settings=settings)
     else:
         security = MockSecurityPlane(settings=settings)
 
-    data: DataPlane = MockDataPlane(settings=settings)
-    trace: TraceRecorder = InMemoryTraceRecorder(settings=settings, bus=bus)
+    data: DataPlane
+    if settings.data_branch_backend == "cow":
+        data = CowDataPlane(settings=settings)
+    else:
+        data = MockDataPlane(settings=settings)
+
+    trace: TraceRecorder
+    if settings.trace_store_uri:
+        trace = JsonlTraceRecorder(settings=settings, bus=bus)
+    else:
+        trace = InMemoryTraceRecorder(settings=settings, bus=bus)
 
     return Orchestrator(
         scheduler=scheduler,
@@ -90,6 +115,8 @@ def build_orchestrator(settings: Settings | None = None, bus: TraceBus | None = 
         data=data,
         trace=trace,
         settings=settings,
+        warm_pool=warm_pool,
+        intent=IntentPredictor(warm_pool=warm_pool, settings=settings),
     )
 
 
@@ -98,10 +125,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     bus = TraceBus()
     app.state.trace_bus = bus
     app.state.settings = get_settings()
-    app.state.orchestrator = build_orchestrator(bus=bus)
+    orchestrator = build_orchestrator(bus=bus)
+    app.state.orchestrator = orchestrator
     # Track background lifecycle tasks so they aren't garbage-collected mid-run.
     app.state.tasks = set()
-    # TODO: start the warm-pool refill loop + demand predictor here for real speed.
+    # Start the warm-pool refill loop: sandboxes are provisioned (and, under
+    # docker, actually booted) ahead of demand, sized by the demand predictor.
+    refill_task: asyncio.Task | None = None
+    if orchestrator.warm_pool is not None:
+        refill_task = asyncio.create_task(orchestrator.warm_pool.run(), name="warm-pool-refill")
     yield
     # Cancel in-flight lifecycle/experiment tasks so shutdown doesn't strand them.
     tasks: set[asyncio.Task] = app.state.tasks
@@ -109,12 +141,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         task.cancel()
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
+    if refill_task is not None:
+        refill_task.cancel()
+        await asyncio.gather(refill_task, return_exceptions=True)
+    # Destroy every still-live sandbox, then drain the warm pool — a leaked
+    # container outliving the control plane is an isolation incident.
+    for workspace_id in list(orchestrator.live):
+        try:
+            await orchestrator.destroy_workspace(workspace_id)
+        except Exception:  # noqa: BLE001 — best-effort cleanup on shutdown
+            pass
+    if orchestrator.warm_pool is not None:
+        await orchestrator.warm_pool.drain()
     # Stop the shared egress proxy if the security plane started one.
-    security = getattr(app.state.orchestrator, "security", None)
-    shutdown = getattr(security, "shutdown", None)
+    shutdown = getattr(orchestrator.security, "shutdown", None)
     if callable(shutdown):
         shutdown()
-    # TODO: also destroy every still-live sandbox on shutdown (needs a live registry).
 
 
 app = FastAPI(title="Crucible control plane", version="0.1.0", lifespan=lifespan)

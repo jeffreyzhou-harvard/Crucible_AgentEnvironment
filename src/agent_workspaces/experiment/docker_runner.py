@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import asyncio
 import os
+import urllib.error
+import urllib.request
 
 from ..config import Settings
 from ..execution.runtime import DockerBackend
@@ -59,6 +61,32 @@ _REDTEAM_SYSTEM = (
 
 _MAX_ITERS = 12
 _MAX_OUTPUT_CHARS = 6000
+_FETCH_MAX_BYTES = 65536
+_FETCH_RESULT_CHARS = 4000
+
+
+async def _broker_fetch(url: str) -> tuple[str, bool]:
+    """Fetch an allowlisted URL on the candidate's behalf; return (content, is_error).
+
+    This is the policy-gated broker: the candidate's container has NO network
+    (deny-all), so the only way out is this call — which runs broker-side,
+    after the shared egress policy has already allowed the host. Responses are
+    size-capped so a candidate can't use the broker for bulk exfil-by-proxy.
+    """
+    if not url.startswith(("http://", "https://")):
+        return f"unsupported URL scheme: {url!r}", True
+
+    def _get() -> str:
+        req = urllib.request.Request(url, headers={"User-Agent": "crucible-broker/0.1"})
+        with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310 — host already allowlisted
+            body = resp.read(_FETCH_MAX_BYTES)
+            text = body.decode("utf-8", "replace")[:_FETCH_RESULT_CHARS]
+            return f"{resp.status} {resp.reason}\n\n{text}"
+
+    try:
+        return await asyncio.to_thread(_get), False
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        return f"fetch failed: {exc}", True
 
 
 async def _competition_agent(
@@ -102,7 +130,7 @@ async def _competition_agent(
                     audit.record(decision)
                 await tracer.emit("security.egress", **decision.to_dict())
                 if decision.allowed:
-                    content, is_err = "200 OK (fetch disabled in demo)", False
+                    content, is_err = await _broker_fetch(url)
                 else:
                     egress_denied += 1
                     content = f"BLOCKED by egress policy: {decision.host} not on the allowlist"

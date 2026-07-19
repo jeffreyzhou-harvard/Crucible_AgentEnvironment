@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { launchWorkspace } from "../lib/api";
+import { useEffect, useState } from "react";
+import { launchWorkspace, signalIntent } from "../lib/api";
 import type { LaunchResponse } from "../types";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader } from "./ui/card";
@@ -15,6 +15,12 @@ export function LaunchForm({ onLaunched }: { onLaunched: (res: LaunchResponse) =
   const [egress, setEgress] = useState("github.com, pypi.org");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // The user opening the launch form IS the intent signal: tell the control
+  // plane now so a shaped sandbox is warming before they hit "Launch".
+  useEffect(() => {
+    signalIntent({ surface: "launch-form" });
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
