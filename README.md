@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="CrucibleLogo.png" alt="Crucible" width="160" />
+  <img src="assets/CrucibleLogo.png" alt="Crucible" width="160" />
 </p>
 
 <h1 align="center">Crucible</h1>

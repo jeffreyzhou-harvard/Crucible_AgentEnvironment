@@ -6,6 +6,7 @@ import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { Reveal } from "../components/Reveal";
 import logoUrl from "../assets/CrucibleLogo.png";
+import githubLogoUrl from "../assets/GithubLogo.png";
 
 const REPO = "https://github.com/jeffreyzhou-harvard/Crucible_AgentEnvironment";
 const CONCEPT = "https://neosigma.ai/blog/agent-workspaces";
@@ -39,7 +40,13 @@ function Header() {
           <a href={CONCEPT} target="_blank" rel="noreferrer" className="hidden hover:text-zinc-900 sm:block">
             Concept
           </a>
-          <a href={REPO} target="_blank" rel="noreferrer" className="hidden hover:text-zinc-900 sm:block">
+          <a
+            href={REPO}
+            target="_blank"
+            rel="noreferrer"
+            className="hidden items-center gap-1.5 hover:text-zinc-900 sm:inline-flex"
+          >
+            <img src={githubLogoUrl} alt="" className="h-4 w-4 object-contain" />
             GitHub
           </a>
           <Link to="/console">
