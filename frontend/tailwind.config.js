@@ -5,7 +5,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        display: ["Fraunces", "Georgia", "serif"],
+        display: ["Bricolage Grotesque", "Manrope", "ui-sans-serif", "sans-serif"],
         sans: ["Manrope", "ui-sans-serif", "system-ui", "sans-serif"],
         mono: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
