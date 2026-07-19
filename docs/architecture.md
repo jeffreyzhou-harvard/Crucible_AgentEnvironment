@@ -91,18 +91,27 @@ The API is streaming-first so the frontend can watch a run unfold:
   so far and then streams live events, so a client sees the whole trajectory whether it
   connects before, during, or after the run — no gaps, no duplicates.
 
-## MVP vs. stubs
+## What's real vs. what's next
 
-Real today: the **execution** plane (Docker container + Claude `bash`-tool agent loop)
-and the **trace** plane (record + live stream). The **control**, **security**, and
-**data** planes are mocks behind their interfaces.
+Real today, selected in `main.py:build_orchestrator` from settings:
 
-Implement the remaining planes in whatever order matches your risk:
+- **Execution** — Docker container + Claude `bash`-tool agent loop, hardened
+  (all caps dropped, no-new-privileges, cgroup limits).
+- **Control** — runtime-backed warm pool with a refill loop started at app
+  lifespan, EWMA demand predictor, shape-keyed claims, intent-driven speculative
+  warming (`POST /v1/intent:signal`), stats at `GET /v1/pool`. The trace records
+  `warm_hit` + `acquire_ms` per run.
+- **Data** (`AWS_DATA_BRANCH_BACKEND=cow`) — copy-on-write branches via APFS
+  clonefile / Linux reflink, content-hash receipts verified against the reference
+  snapshot by the health checker before the agent runs; missing snapshots fail loudly.
+- **Security** (`AWS_SECURITY_BACKEND=proxy`) — secretless egress proxy with
+  allowlist + credential injection + audit; the experiment's `web_fetch` broker
+  performs real policy-gated fetches.
+- **Trace** — live stream always; durable JSONL store + `GET /v1/traces/{id}`
+  replay when `AWS_TRACE_STORE_URI` is set.
 
-- **Correctness-first:** data → control → security
-- **Safety-first:** security → data → control
-
-Grep the TODOs for the full worklist:
+Next frontier (the remaining `TODO:`s): microVM/gVisor runtime backends, Neon/ZFS
+data backends, per-candidate proxy instances, multi-tenant quotas and identity.
 
 ```bash
 make todos      # or: grep -rn "TODO:" src/

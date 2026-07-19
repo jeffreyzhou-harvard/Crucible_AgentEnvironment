@@ -46,6 +46,13 @@ class Settings(BaseSettings):
     # Docker network for the sandbox container. "bridge" = normal egress (MVP default).
     # TODO: the security plane should replace this with an isolated network + egress proxy.
     sandbox_network: str = "bridge"
+    # Container hardening (docker backend): drop all capabilities, forbid
+    # privilege escalation, and cap memory/pids/cpu so one sandbox can't
+    # starve the host. Disable only if a task genuinely needs capabilities.
+    sandbox_harden: bool = True
+    sandbox_mem_limit: str = "1g"
+    sandbox_pids_limit: int = 512
+    sandbox_nano_cpus: int = 2_000_000_000  # 2 CPUs
 
     # --- Agent loop (Claude) ---
     anthropic_model: str = "claude-opus-4-8"
@@ -80,6 +87,9 @@ class Settings(BaseSettings):
     # --- Data plane ---
     dataset_snapshot_uri: str = ""
     data_branch_backend: Literal["mock", "zfs", "neon", "cow"] = "mock"
+    # Where the CoW backend materializes per-run branches (APFS clonefile /
+    # Linux reflink — instant, block-sharing copies of the reference snapshot).
+    data_branch_dir: str = "~/.crucible/branches"
 
     # --- Trace store ---
     trace_store_uri: str = ""

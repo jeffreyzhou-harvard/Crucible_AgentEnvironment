@@ -8,6 +8,9 @@ empty or nothing matches.
 from __future__ import annotations
 
 import abc
+import math
+import time
+from collections import deque
 
 from ..config import Settings
 from ..models import Sandbox, WorkspaceRequest
@@ -36,43 +39,70 @@ class InMemoryScheduler(Scheduler):
     Good enough to exercise the lifecycle in tests; NOT suitable for real load.
     """
 
-    def __init__(self, warm_pool: WarmPool, settings: Settings) -> None:
+    def __init__(
+        self,
+        warm_pool: WarmPool,
+        settings: Settings,
+        predictor: DemandPredictor | None = None,
+    ) -> None:
         self.warm_pool = warm_pool
         self.settings = settings
+        self.predictor = predictor
 
     async def acquire(self, request: WorkspaceRequest) -> Sandbox:
-        # TODO: matching logic. A warm sandbox is only reusable if its base image,
-        #       mounted tooling, and pre-provisioned services match the request.
-        #       Compute a "shape key" from the request and look for a warm match.
+        # Every arrival feeds the demand forecast so the pool pre-scales.
+        if self.predictor is not None:
+            self.predictor.record_arrival()
+        # Fast path: a warm sandbox whose shape (base image + tooling) matches.
         sandbox = await self.warm_pool.claim(request)
         if sandbox is not None:
             return sandbox
-        # Cold path: nothing warm matched.
-        # TODO: provision from settings.sandbox_base_image via the execution runtime.
+        # Cold path: nothing warm matched — provision on the request path.
+        # With the Docker composition this boots a real container (the latency
+        # the warm pool exists to hide); the trace records it as warm_hit=false.
         return await self.warm_pool.provision_now(request)
 
     async def release(self, sandbox: Sandbox) -> None:
-        # TODO: decide recycle-vs-destroy. Recycling is only safe if the sandbox can
-        #       be reset to a clean, snapshot-equivalent state (fs, processes, data
-        #       branches all reverted). If in doubt, destroy — reproducibility and
-        #       isolation beat the latency win of an unsafe reuse.
+        # Recycling is only safe if the sandbox can be reset to a clean,
+        # snapshot-equivalent state (fs, processes, data branches all reverted).
+        # No verified reset exists yet, so the pool always destroys —
+        # reproducibility and isolation beat the latency win of an unsafe reuse.
         await self.warm_pool.release(sandbox)
 
 
 class DemandPredictor:
     """Predicts near-future sandbox demand so the warm pool can pre-scale.
 
-    Feeds the warm pool's refill loop. Signals might include time-of-day, per-tenant
-    request history, and live intent signals (see intent.py).
+    Feeds the warm pool's refill loop. Uses an exponentially-weighted moving
+    average of the recent arrival rate: the pool targets enough warm sandboxes
+    to absorb the next `horizon_seconds` of predicted arrivals, floored at
+    `warm_pool_min_size` and capped by the pool itself at `warm_pool_max_size`.
     """
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        horizon_seconds: float = 60.0,
+        window_seconds: float = 300.0,
+    ) -> None:
         self.settings = settings
+        self.horizon = horizon_seconds
+        self.window = window_seconds
+        self._arrivals: deque[float] = deque(maxlen=256)
+        self._rate_ewma = 0.0  # arrivals per second
+        self._alpha = 0.3
+
+    def record_arrival(self) -> None:
+        now = time.monotonic()
+        self._arrivals.append(now)
+        # Instantaneous rate over the trailing window, folded into the EWMA.
+        cutoff = now - self.window
+        recent = sum(1 for t in self._arrivals if t >= cutoff)
+        instant_rate = recent / self.window
+        self._rate_ewma = self._alpha * instant_rate + (1 - self._alpha) * self._rate_ewma
 
     async def predict(self) -> int:
-        """Return the number of warm sandboxes to target right now.
-
-        TODO: replace the constant floor with a real forecast (EWMA of recent
-        arrivals, a small time-series model, or a per-tenant reservation scheme).
-        """
-        return self.settings.warm_pool_min_size
+        """Warm sandboxes to target right now: forecast arrivals over the horizon."""
+        forecast = math.ceil(self._rate_ewma * self.horizon)
+        return max(self.settings.warm_pool_min_size, forecast)

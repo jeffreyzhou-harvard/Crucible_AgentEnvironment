@@ -9,9 +9,9 @@ from __future__ import annotations
 import abc
 
 from ..config import Settings
-from ..models import DatasetSpec, Sandbox
-from .branching import BranchingBackend, MockBranchingBackend
-from .health import HealthChecker, MockHealthChecker
+from ..models import DataBranch, DatasetSpec, Sandbox
+from .branching import BranchingBackend, CowBranchingBackend, MockBranchingBackend
+from .health import CowHealthChecker, HealthChecker, MockHealthChecker
 
 
 class DataPlaneError(RuntimeError):
@@ -26,20 +26,29 @@ class DataPlane(abc.ABC):
     """Makes datasets available to a sandbox and reclaims them afterwards."""
 
     @abc.abstractmethod
-    async def branch(self, sandbox: Sandbox, datasets: list[DatasetSpec]) -> list[str]:
-        """Create per-run branches for `datasets`; return their branch ids.
+    async def branch(self, sandbox: Sandbox, datasets: list[DatasetSpec]) -> list[DataBranch]:
+        """Create per-run branches for `datasets`; return their handles.
 
         Each branch shares read-only reference data and keeps private writes as a
         delta, so every run starts identical with near-zero storage overhead.
         """
 
     @abc.abstractmethod
-    async def teardown(self, branch_ids: list[str]) -> None:
+    async def teardown(self, branches: list[DataBranch]) -> None:
         """Discard the run's branches (deltas dropped; reference untouched)."""
 
 
-class MockDataPlane(DataPlane):
-    """Wires the mock branching backend + health checker. Provisions nothing real."""
+class StandardDataPlane(DataPlane):
+    """Branch + health-check pipeline over a pluggable backend.
+
+    With the mock backend this provisions nothing real (fake ids, always
+    healthy). With the CoW backend it materializes real copy-on-write branches
+    and *proves* each one starts identical to the reference snapshot.
+    """
+
+    #: When True, a requested dataset with no configured snapshot is an error —
+    #: silently starting from empty data destroys reproducibility.
+    strict = False
 
     def __init__(
         self,
@@ -51,28 +60,56 @@ class MockDataPlane(DataPlane):
         self.backend = backend or MockBranchingBackend(settings)
         self.health = health or MockHealthChecker(settings)
 
-    async def branch(self, sandbox: Sandbox, datasets: list[DatasetSpec]) -> list[str]:
-        branch_ids: list[str] = []
-        for ds in datasets:
-            snapshot = ds.snapshot_id or self.settings.dataset_snapshot_uri
-            # TODO: fail loudly if no snapshot is configured for a requested dataset —
-            #       silently starting from empty data destroys reproducibility.
-            branch_id = await self.backend.create_branch(
-                snapshot_id=snapshot, label=f"{sandbox.id}:{ds.name}"
-            )
-            # TODO: attach the branch's connection info into the sandbox (env/secret
-            #       file) VIA the execution plane — coordinate ordering with attach().
-            branch_ids.append(branch_id)
+    async def branch(self, sandbox: Sandbox, datasets: list[DatasetSpec]) -> list[DataBranch]:
+        branches: list[DataBranch] = []
+        try:
+            for ds in datasets:
+                snapshot = ds.snapshot_id or self.settings.dataset_snapshot_uri
+                if not snapshot:
+                    if self.strict:
+                        raise DataPlaneError(
+                            f"dataset {ds.name!r} requested but no snapshot is configured "
+                            "(set AWS_DATASET_SNAPSHOT_URI or DatasetSpec.snapshot_id)"
+                        )
+                    # Mock mode stays lenient so the zero-infra demo path works.
+                branch = await self.backend.create_branch(
+                    snapshot_id=snapshot, label=f"{sandbox.id}:{ds.name}"
+                )
+                branch.dataset = ds.name
+                branch.kind = ds.kind
+                branches.append(branch)
+        except DataPlaneError:
+            await self.teardown(branches)
+            raise
+        except Exception as exc:
+            await self.teardown(branches)
+            raise DataPlaneError(f"branching failed: {exc}") from exc
 
         # Health-check BEFORE the agent is allowed to touch the data. On failure,
         # discard the branches and raise so the orchestrator releases the sandbox
         # instead of running blind against unhealthy data.
-        healthy = await self.health.check(branch_ids)
+        healthy = await self.health.check(branches)
         if not healthy:
-            await self.teardown(branch_ids)
+            await self.teardown(branches)
             raise DataPlaneError("data plane health check failed")
-        return branch_ids
+        return branches
 
-    async def teardown(self, branch_ids: list[str]) -> None:
-        for branch_id in branch_ids:
-            await self.backend.discard_branch(branch_id)
+    async def teardown(self, branches: list[DataBranch]) -> None:
+        for branch in branches:
+            await self.backend.discard_branch(branch)
+
+
+class MockDataPlane(StandardDataPlane):
+    """Wires the mock branching backend + health checker. Provisions nothing real."""
+
+    strict = False
+
+
+class CowDataPlane(StandardDataPlane):
+    """Real data plane: filesystem copy-on-write branches with hash receipts."""
+
+    strict = True
+
+    def __init__(self, settings: Settings) -> None:
+        backend = CowBranchingBackend(settings)
+        super().__init__(settings, backend=backend, health=CowHealthChecker(settings, backend))

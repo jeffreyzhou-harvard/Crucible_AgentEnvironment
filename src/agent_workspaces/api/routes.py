@@ -69,6 +69,11 @@ async def launch(
     tasks: set = request.app.state.tasks
     tasks.add(task)
     task.add_done_callback(tasks.discard)
+    # Keep a handle per workspace so :destroy can cancel the running lifecycle.
+    workspace_tasks: dict = getattr(request.app.state, "workspace_tasks", None) or {}
+    request.app.state.workspace_tasks = workspace_tasks
+    workspace_tasks[workspace_id] = task
+    task.add_done_callback(lambda _t, wid=workspace_id: workspace_tasks.pop(wid, None))
 
     return LaunchResponse(workspace_id=workspace_id, trace_id=trace_id)
 
@@ -145,7 +150,59 @@ async def stream_trace(websocket: WebSocket, trace_id: str) -> None:
         await bus.unsubscribe(trace_id, queue)
 
 
-# TODO: round out the surface as the planes get real:
-#   GET  /v1/traces/{trace_id}            -> fetch a persisted trajectory (replay/eval)
-#   POST /v1/workspaces/{id}:destroy      -> force teardown of a live workspace
-#   GET  /v1/pool                         -> warm-pool stats (debug the control plane)
+@router.get("/traces/{trace_id}")
+async def get_trace(
+    trace_id: str,
+    orchestrator: Orchestrator = Depends(get_orchestrator),
+) -> dict:
+    """Fetch a recorded trajectory for replay / evaluation.
+
+    With the durable store (AWS_TRACE_STORE_URI) this survives process
+    restarts — the sandbox is gone, the trace remains.
+    """
+    events = await orchestrator.trace.load(trace_id)
+    if not events:
+        raise HTTPException(status_code=404, detail=f"no trace {trace_id!r}")
+    return {"trace_id": trace_id, "events": [e.model_dump(mode="json") for e in events]}
+
+
+@router.get("/pool")
+async def pool_stats(
+    orchestrator: Orchestrator = Depends(get_orchestrator),
+) -> dict:
+    """Warm-pool observability: size, hit rate, and what's currently hot."""
+    if orchestrator.warm_pool is None:
+        return {"enabled": False}
+    stats = await orchestrator.warm_pool.stats()
+    return {"enabled": True, **stats}
+
+
+@router.post("/intent:signal")
+async def intent_signal(
+    body: dict,
+    orchestrator: Orchestrator = Depends(get_orchestrator),
+) -> dict:
+    """Early-intent hook: the UI calls this the moment a user starts composing
+    a request, so a shaped sandbox can be warming before they hit launch."""
+    if orchestrator.intent is None:
+        return {"warmed": False}
+    warmed = await orchestrator.intent.on_signal(body or {})
+    return {"warmed": warmed}
+
+
+@router.post("/workspaces/{workspace_id}:destroy")
+async def destroy_workspace(
+    workspace_id: str,
+    request: Request,
+    orchestrator: Orchestrator = Depends(get_orchestrator),
+    _: None = Depends(require_api_key),
+) -> dict:
+    """Force teardown of a live workspace: cancel its lifecycle, reclaim the
+    sandbox. Idempotent — destroying an unknown/finished workspace is a no-op."""
+    workspace_tasks: dict = getattr(request.app.state, "workspace_tasks", {}) or {}
+    task = workspace_tasks.pop(workspace_id, None)
+    if task is not None and not task.done():
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+    destroyed = await orchestrator.destroy_workspace(workspace_id)
+    return {"workspace_id": workspace_id, "destroyed": destroyed or task is not None}
