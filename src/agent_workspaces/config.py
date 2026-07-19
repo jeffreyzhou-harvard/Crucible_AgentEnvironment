@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # Browser origins allowed to call the API (comma-separated). Defaults to the
     # local Vite dev server; set to your deployed frontend origin in prod.
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    # Regex matching additional allowed origins. Defaults to any Vercel deployment
+    # (prod + previews), whose subdomains change per deploy. Override as needed.
+    cors_origin_regex: str = r"https://.*\.vercel\.app"
     # Optional API key. Empty = open (local dev). When set, launch endpoints require
     # a matching `X-API-Key` header.
     api_key: str = ""

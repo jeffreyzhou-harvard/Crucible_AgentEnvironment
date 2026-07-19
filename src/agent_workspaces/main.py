@@ -164,6 +164,10 @@ app = FastAPI(title="Crucible control plane", version="0.1.0", lifespan=lifespan
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_origin_list,
+    # Also allow any Vercel deployment (prod + per-commit/branch previews), whose
+    # subdomains change every deploy. Configure explicit prod origins via
+    # AWS_CORS_ORIGINS; set AWS_CORS_ORIGIN_REGEX to override this default.
+    allow_origin_regex=get_settings().cors_origin_regex,
     allow_methods=["*"],
     allow_headers=["*"],
 )
