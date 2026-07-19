@@ -7,7 +7,7 @@ import { Card, CardContent } from "../components/ui/card";
 const REPO = "https://github.com/jeffreyzhou-harvard/AutoResearchEnvironment";
 const CONCEPT = "https://neosigma.ai/blog/agent-workspaces";
 
-// Element 2 — logo / brand
+// Element 2 - logo / brand
 function Wordmark() {
   return (
     <span className="text-base font-semibold tracking-tight text-zinc-100">
@@ -37,7 +37,7 @@ function Header() {
   );
 }
 
-// Element 6 — visual: a self-contained mock of the console
+// Element 6 - visual: a self-contained mock of the console
 function ConsolePreview() {
   const planes = ["Control", "Data", "Security", "Execution"];
   const bars = [
@@ -72,7 +72,7 @@ function ConsolePreview() {
       </div>
       <div className="mt-3 space-y-0.5 rounded-lg border border-zinc-800 bg-black/50 p-2.5 font-mono text-[11px]">
         <div className="text-emerald-400"><span className="text-emerald-600">$</span> pytest -q</div>
-        <div className="text-zinc-500">held-out 9/9 ✓ — verified</div>
+        <div className="text-zinc-500">held-out 9/9 ✓ verified</div>
         <div className="text-rose-400">⛔ egress BLOCK · pastebin.com · not on allowlist</div>
       </div>
     </div>
@@ -84,17 +84,17 @@ function Hero() {
     <section className="mx-auto max-w-5xl px-6 pt-16 pb-14">
       <div className="grid items-center gap-10 lg:grid-cols-2">
         <div>
-          {/* Element 5 — social proof (context) */}
+          {/* Element 5 - social proof (context) */}
           <Badge className="border-zinc-700 text-zinc-400">Auto Research Summit · Build Session</Badge>
-          {/* Element 3 — SEO title + subtitle */}
+          {/* Element 3 - SEO title + subtitle */}
           <h1 className="mt-4 text-4xl font-semibold leading-tight tracking-tight text-zinc-50 sm:text-5xl">
             The environment self-improving agents run in.
           </h1>
           <p className="mt-4 max-w-md text-base leading-relaxed text-zinc-400">
             Isolated, reproducible sandboxes where agents propose, test, and validate their own
-            work — and can't cheat their way up the leaderboard.
+            work, and can't cheat their way up the leaderboard.
           </p>
-          {/* Element 4 — primary CTA */}
+          {/* Element 4 - primary CTA */}
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <Link to="/console">
               <Button className="px-5 py-2.5">Launch the console →</Button>
@@ -115,13 +115,67 @@ function Hero() {
   );
 }
 
-// Element 7 — core benefits (the four planes)
+// Problem → solution: state what breaks, then how Crucible fixes it.
+function ProblemSolution() {
+  const pairs = [
+    {
+      problem:
+        "A self-improving agent has to run its own code to know whether the work is right. But that code is untrusted and model-generated: it can leak secrets, phone home, or wreck the host.",
+      solution:
+        "Every run is sealed off. Deny-all egress through an allowlist proxy, secretless credentials that never enter the box, and throwaway containers. The agent gets a real machine with nothing to exfiltrate.",
+    },
+    {
+      problem:
+        "Agents game evaluations. A candidate overfits the visible tests, posts a top score, and looks like a winner even though the solution never generalizes.",
+      solution:
+        "Every candidate is graded on held-out cases in a fresh sandbox it never touched. Gaming shows up as a gap between the in-sandbox and held-out scores, and a candidate that games the visible tests is disqualified, not rewarded.",
+    },
+    {
+      problem:
+        "Realistic environments are slow to start and drift between runs, so two attempts aren't comparable and results can't be reproduced.",
+      solution:
+        "Warm pools hand back a ready sandbox instantly, and copy-on-write branching starts every run from a byte-identical world. Fast, and fair to compare.",
+    },
+  ];
+  return (
+    <section className="mx-auto max-w-5xl px-6 py-14">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+        The problem, and how Crucible solves it
+      </h2>
+      <p className="mt-3 max-w-2xl text-base leading-relaxed text-zinc-400">
+        To improve itself, an agent must run its own code to verify the work. That forces two hard
+        problems at once: running untrusted code safely, and trusting the score it produces.
+        Crucible is built to solve both.
+      </p>
+      <div className="mt-6 space-y-3">
+        {pairs.map((p, i) => (
+          <div key={i} className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+              <div className="text-xs font-medium uppercase tracking-wide text-rose-400/80">
+                The problem
+              </div>
+              <p className="mt-1.5 text-sm leading-relaxed text-zinc-400">{p.problem}</p>
+            </div>
+            <div className="rounded-xl border border-emerald-900/50 bg-emerald-950/20 p-4">
+              <div className="text-xs font-medium uppercase tracking-wide text-emerald-400/90">
+                Crucible
+              </div>
+              <p className="mt-1.5 text-sm leading-relaxed text-zinc-300">{p.solution}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// Element 7 - core benefits (the four planes)
 function Benefits() {
   const items = [
-    { icon: "⚡", title: "Speed", body: "Warm pools hand back a ready sandbox instantly — spin up thousands, not one." },
-    { icon: "🖥️", title: "Fidelity", body: "A real dev workstation — Docker, repos, services — so what works here works in prod." },
+    { icon: "⚡", title: "Speed", body: "Warm pools hand back a ready sandbox instantly. Spin up thousands, not one." },
+    { icon: "🖥️", title: "Fidelity", body: "A real dev workstation with Docker, repos, and services, so what works here works in prod." },
     { icon: "🛡️", title: "Isolation", body: "Deny-all egress, an allowlist proxy, and secretless creds. Nothing to exfiltrate." },
-    { icon: "🧬", title: "Reproducibility", body: "Copy-on-write branching gives every run a byte-identical world — fair, comparable scores." },
+    { icon: "🧬", title: "Reproducibility", body: "Copy-on-write branching gives every run a byte-identical world, so scores stay fair and comparable." },
   ];
   return (
     <section className="mx-auto max-w-5xl px-6 py-14">
@@ -141,7 +195,7 @@ function Benefits() {
   );
 }
 
-// Element 8 — testimonials (illustrative, role-based)
+// Element 8 - testimonials (illustrative, role-based)
 function Testimonials() {
   const quotes = [
     { initials: "RE", role: "Research engineer", text: "Best-of-N in isolated, identical sandboxes is exactly the eval substrate self-improvement loops keep reinventing." },
@@ -169,25 +223,25 @@ function Testimonials() {
   );
 }
 
-// Element 9 — FAQ
+// Element 9 - FAQ
 function Faq() {
   return (
     <section className="mx-auto max-w-3xl px-6 py-14">
       <h2 className="mb-5 text-sm font-semibold uppercase tracking-wide text-zinc-500">FAQ</h2>
       <Accordion
         items={[
-          { q: "What is Crucible?", a: "Sandbox environments where autonomous agents safely execute code, interact with real services, and verify their own work — the environment layer a self-improving research loop runs on." },
+          { q: "What is Crucible?", a: "Sandbox environments where autonomous agents safely execute code, interact with real services, and verify their own work. It's the environment layer a self-improving research loop runs on." },
           { q: "Do I need Docker or an API key?", a: "No. The console ships a scripted mode that runs the whole flow with neither. Add Docker + an Anthropic key to run real agents in real containers." },
           { q: "What is a best-of-N experiment?", a: "N agents solve the same task in parallel, each in an isolated, byte-identical sandbox, scored against a held-out grader. Propose → test → validate → select: the atomic unit of self-improvement." },
-          { q: "How do you stop an agent from gaming the score?", a: "Every candidate is scored on held-out cases it never sees, in a fresh sandbox. High in-sandbox but low held-out means overfitting — the candidate is disqualified, not rewarded." },
-          { q: "Is the agent's code contained?", a: "Yes. Deny-all egress with an allowlist proxy, secretless credentials, and network-disabled containers — even a fully compromised sandbox has nothing to steal and nowhere to phone home." },
+          { q: "How do you stop an agent from gaming the score?", a: "Every candidate is scored on held-out cases it never sees, in a fresh sandbox. High in-sandbox but low held-out means overfitting, so the candidate is disqualified, not rewarded." },
+          { q: "Is the agent's code contained?", a: "Yes. Deny-all egress with an allowlist proxy, secretless credentials, and network-disabled containers. Even a fully compromised sandbox has nothing to steal and nowhere to phone home." },
         ]}
       />
     </section>
   );
 }
 
-// Element 10 — final CTA
+// Element 10 - final CTA
 function FinalCta() {
   return (
     <section className="mx-auto max-w-5xl px-6 py-14">
@@ -198,7 +252,7 @@ function FinalCta() {
           </h2>
           <p className="max-w-md text-sm text-zinc-400">
             Launch a best-of-N experiment and see the planes light up, the agents race, and the
-            leaderboard sort itself — live.
+            leaderboard sort itself, live.
           </p>
           <Link to="/console">
             <Button className="px-6 py-2.5">Launch the console →</Button>
@@ -209,7 +263,7 @@ function FinalCta() {
   );
 }
 
-// Element 11 — footer (contact / legal)
+// Element 11 - footer (contact / legal)
 function Footer() {
   return (
     <footer className="border-t border-zinc-900">
@@ -262,6 +316,7 @@ export default function Landing() {
       <Header />
       <main>
         <Hero />
+        <ProblemSolution />
         <Benefits />
         <Testimonials />
         <Faq />
