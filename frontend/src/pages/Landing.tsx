@@ -1,12 +1,24 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Accordion } from "../components/ui/accordion";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
+import { Reveal } from "../components/Reveal";
 import logoUrl from "../assets/CrucibleLogo.png";
 
 const REPO = "https://github.com/jeffreyzhou-harvard/AutoResearchEnvironment";
 const CONCEPT = "https://neosigma.ai/blog/agent-workspaces";
+
+// Numbered section header: the "01 / 02" pattern keeps sections scannable.
+function SectionHeading({ n, children }: { n: string; children: ReactNode }) {
+  return (
+    <div className="flex items-baseline gap-3">
+      <span className="font-mono text-xs text-emerald-500/70">{n}</span>
+      <h2 className="font-display text-2xl font-medium tracking-tight text-zinc-100">{children}</h2>
+    </div>
+  );
+}
 
 // Element 2 - logo / brand
 function Wordmark() {
@@ -49,11 +61,14 @@ function ConsolePreview() {
     { label: "c3", pct: 0, tone: "bg-rose-900", tag: "blocked" },
   ];
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4 shadow-2xl shadow-black/40">
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4 shadow-2xl shadow-black/40 transition-transform duration-500 hover:-translate-y-1">
       <div className="mb-3 flex flex-wrap gap-1.5">
-        {planes.map((p) => (
+        {planes.map((p, i) => (
           <span key={p} className="flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1 text-[11px] text-zinc-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            <span
+              className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400"
+              style={{ animationDelay: `${i * 350}ms`, animationDuration: "2.8s" }}
+            />
             {p}
           </span>
         ))}
@@ -62,11 +77,14 @@ function ConsolePreview() {
         🧬 4 sandboxes · identical world <span className="font-mono text-violet-400">a1c3…</span> ✓
       </div>
       <div className="space-y-1.5">
-        {bars.map((b) => (
+        {bars.map((b, i) => (
           <div key={b.label} className="flex items-center gap-2">
             <span className="w-6 font-mono text-[11px] text-zinc-500">{b.label}</span>
             <div className="h-4 flex-1 overflow-hidden rounded bg-zinc-800/60">
-              <div className={`h-full ${b.tone}`} style={{ width: `${Math.max(b.pct, 4)}%` }} />
+              <div
+                className={`h-full animate-bar-fill ${b.tone}`}
+                style={{ width: `${Math.max(b.pct, 4)}%`, animationDelay: `${400 + i * 180}ms` }}
+              />
             </div>
             {b.tag && <span className="w-14 text-right text-[10px] text-zinc-500">{b.tag}</span>}
           </div>
@@ -83,35 +101,63 @@ function ConsolePreview() {
 
 function Hero() {
   return (
-    <section className="mx-auto max-w-5xl px-6 pt-16 pb-14">
-      <div className="grid items-center gap-10 lg:grid-cols-2">
-        <div>
-          {/* Element 5 - social proof (context) */}
-          <Badge className="border-zinc-700 text-zinc-400">Auto Research Summit · Build Session</Badge>
-          {/* Element 3 - SEO title + subtitle */}
-          <h1 className="mt-4 text-balance text-5xl font-semibold leading-[1.08] tracking-tight text-zinc-50 sm:text-6xl">
-            The environment self-improving agents run in.
-          </h1>
-          <p className="mt-4 max-w-md text-base leading-relaxed text-zinc-400">
-            Isolated, reproducible sandboxes where agents propose, test, and validate their own
-            work, and can't cheat their way up the leaderboard.
-          </p>
-          {/* Element 4 - primary CTA */}
-          <div className="mt-7 flex flex-wrap items-center gap-3">
-            <Link to="/console">
-              <Button className="px-5 py-2.5">Launch the console →</Button>
-            </Link>
-            <a href={CONCEPT} target="_blank" rel="noreferrer">
-              <Button variant="outline" className="px-5 py-2.5">Read the concept</Button>
-            </a>
+    <section className="relative overflow-hidden">
+      {/* Ember glow: the crucible's heat, drifting slowly behind the headline. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-40 left-1/2 h-[480px] w-[720px] -translate-x-1/2 animate-ember-drift rounded-full bg-[radial-gradient(ellipse_at_center,rgba(194,84,63,0.14),rgba(16,185,129,0.05)_55%,transparent_70%)] blur-2xl"
+      />
+      <div className="relative mx-auto max-w-5xl px-6 pt-16 pb-14">
+        <div className="grid items-center gap-10 lg:grid-cols-2">
+          <div>
+            {/* Element 5 - social proof (context) */}
+            <div className="animate-rise">
+              <Badge className="border-zinc-700 text-zinc-400">Auto Research Summit · Build Session</Badge>
+            </div>
+            {/* Element 3 - SEO title + subtitle */}
+            <h1
+              className="mt-4 animate-rise text-balance font-display text-5xl font-medium leading-[1.06] tracking-tight text-zinc-50 sm:text-6xl"
+              style={{ animationDelay: "90ms" }}
+            >
+              The environment self-improving agents{" "}
+              <em className="bg-gradient-to-r from-emerald-300 via-emerald-400 to-[#e08a6d] bg-clip-text italic text-transparent">
+                run in
+              </em>
+              .
+            </h1>
+            <p
+              className="mt-4 max-w-md animate-rise text-base leading-relaxed text-zinc-400"
+              style={{ animationDelay: "180ms" }}
+            >
+              Isolated, reproducible sandboxes where agents propose, test, and validate their own
+              work, and can't cheat their way up the leaderboard.
+            </p>
+            {/* Element 4 - primary CTA */}
+            <div className="mt-7 flex animate-rise flex-wrap items-center gap-3" style={{ animationDelay: "270ms" }}>
+              <Link to="/console">
+                <Button className="animate-shimmer bg-[linear-gradient(110deg,#10b981,45%,#5eead4,55%,#10b981)] bg-[length:200%_100%] px-5 py-2.5 transition-transform hover:-translate-y-0.5">
+                  Launch the console →
+                </Button>
+              </Link>
+              <a href={CONCEPT} target="_blank" rel="noreferrer">
+                <Button variant="outline" className="px-5 py-2.5 transition-transform hover:-translate-y-0.5">
+                  Read the concept
+                </Button>
+              </a>
+            </div>
+            <div
+              className="mt-8 flex animate-rise flex-wrap gap-x-6 gap-y-2 text-xs text-zinc-500"
+              style={{ animationDelay: "360ms" }}
+            >
+              <span>◆ 4 planes, one system</span>
+              <span>◆ held-out verified scoring</span>
+              <span>◆ 0 secrets in the sandbox</span>
+            </div>
           </div>
-          <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-xs text-zinc-500">
-            <span>◆ 4 planes, one system</span>
-            <span>◆ held-out verified scoring</span>
-            <span>◆ 0 secrets in the sandbox</span>
+          <div className="animate-rise" style={{ animationDelay: "200ms" }}>
+            <ConsolePreview />
           </div>
         </div>
-        <ConsolePreview />
       </div>
     </section>
   );
@@ -141,30 +187,32 @@ function ProblemSolution() {
   ];
   return (
     <section className="mx-auto max-w-5xl px-6 py-14">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-        The problem, and how Crucible solves it
-      </h2>
-      <p className="mt-3 max-w-2xl text-base leading-relaxed text-zinc-400">
-        To improve itself, an agent must run its own code to verify the work. That forces two hard
-        problems at once: running untrusted code safely, and trusting the score it produces.
-        Crucible is built to solve both.
-      </p>
+      <Reveal>
+        <SectionHeading n="01">The problem, and how Crucible solves it</SectionHeading>
+        <p className="mt-3 max-w-2xl text-base leading-relaxed text-zinc-400">
+          To improve itself, an agent must run its own code to verify the work. That forces two hard
+          problems at once: running untrusted code safely, and trusting the score it produces.
+          Crucible is built to solve both.
+        </p>
+      </Reveal>
       <div className="mt-6 space-y-3">
         {pairs.map((p, i) => (
-          <div key={i} className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
-              <div className="text-xs font-medium uppercase tracking-wide text-rose-400/80">
-                The problem
+          <Reveal key={i} delay={i * 90}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 transition-colors duration-300 hover:border-zinc-700">
+                <div className="text-xs font-medium uppercase tracking-wide text-rose-400/80">
+                  The problem
+                </div>
+                <p className="mt-1.5 text-sm leading-relaxed text-zinc-400">{p.problem}</p>
               </div>
-              <p className="mt-1.5 text-sm leading-relaxed text-zinc-400">{p.problem}</p>
-            </div>
-            <div className="rounded-xl border border-emerald-900/50 bg-emerald-950/20 p-4">
-              <div className="text-xs font-medium uppercase tracking-wide text-emerald-400/90">
-                Crucible
+              <div className="rounded-xl border border-emerald-900/50 bg-emerald-950/20 p-4 transition-colors duration-300 hover:border-emerald-800">
+                <div className="text-xs font-medium uppercase tracking-wide text-emerald-400/90">
+                  Crucible
+                </div>
+                <p className="mt-1.5 text-sm leading-relaxed text-zinc-300">{p.solution}</p>
               </div>
-              <p className="mt-1.5 text-sm leading-relaxed text-zinc-300">{p.solution}</p>
             </div>
-          </div>
+          </Reveal>
         ))}
       </div>
     </section>
@@ -181,16 +229,20 @@ function Benefits() {
   ];
   return (
     <section className="mx-auto max-w-5xl px-6 py-14">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Four planes, pushed at once</h2>
+      <Reveal>
+        <SectionHeading n="02">Four planes, pushed at once</SectionHeading>
+      </Reveal>
       <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {items.map((it) => (
-          <Card key={it.title}>
-            <CardContent className="space-y-2">
-              <div className="text-xl">{it.icon}</div>
-              <div className="text-sm font-semibold text-zinc-100">{it.title}</div>
-              <p className="text-xs leading-relaxed text-zinc-400">{it.body}</p>
-            </CardContent>
-          </Card>
+        {items.map((it, i) => (
+          <Reveal key={it.title} delay={i * 80}>
+            <Card className="h-full transition-all duration-300 hover:-translate-y-1 hover:border-zinc-700 hover:shadow-lg hover:shadow-black/30">
+              <CardContent className="space-y-2">
+                <div className="text-xl">{it.icon}</div>
+                <div className="text-sm font-semibold text-zinc-100">{it.title}</div>
+                <p className="text-xs leading-relaxed text-zinc-400">{it.body}</p>
+              </CardContent>
+            </Card>
+          </Reveal>
         ))}
       </div>
     </section>
@@ -205,20 +257,24 @@ function Testimonials() {
   ];
   return (
     <section className="mx-auto max-w-5xl px-6 py-14">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Why builders care</h2>
+      <Reveal>
+        <SectionHeading n="03">Why builders care</SectionHeading>
+      </Reveal>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
-        {quotes.map((q) => (
-          <Card key={q.role}>
-            <CardContent className="space-y-3">
-              <p className="text-sm leading-relaxed text-zinc-300">"{q.text}"</p>
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800 text-[11px] font-medium text-zinc-300">
-                  {q.initials}
-                </span>
-                <span className="text-xs text-zinc-500">{q.role}</span>
-              </div>
-            </CardContent>
-          </Card>
+        {quotes.map((q, i) => (
+          <Reveal key={q.role} delay={i * 100}>
+            <Card className="h-full transition-all duration-300 hover:-translate-y-1 hover:border-zinc-700 hover:shadow-lg hover:shadow-black/30">
+              <CardContent className="space-y-3">
+                <p className="font-display text-sm italic leading-relaxed text-zinc-300">"{q.text}"</p>
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800 text-[11px] font-medium text-zinc-300">
+                    {q.initials}
+                  </span>
+                  <span className="text-xs text-zinc-500">{q.role}</span>
+                </div>
+              </CardContent>
+            </Card>
+          </Reveal>
         ))}
       </div>
     </section>
@@ -229,7 +285,11 @@ function Testimonials() {
 function Faq() {
   return (
     <section className="mx-auto max-w-3xl px-6 py-14">
-      <h2 className="mb-5 text-sm font-semibold uppercase tracking-wide text-zinc-500">FAQ</h2>
+      <Reveal>
+        <div className="mb-5">
+          <SectionHeading n="04">FAQ</SectionHeading>
+        </div>
+      </Reveal>
       <Accordion
         items={[
           { q: "What is Crucible?", a: "Sandbox environments where autonomous agents safely execute code, interact with real services, and verify their own work. It's the environment layer a self-improving research loop runs on." },
@@ -247,20 +307,28 @@ function Faq() {
 function FinalCta() {
   return (
     <section className="mx-auto max-w-5xl px-6 py-14">
-      <Card className="border-emerald-900/50 bg-gradient-to-br from-emerald-950/30 to-zinc-900/40">
-        <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
-          <h2 className="text-2xl font-semibold tracking-tight text-zinc-50">
-            Watch a self-improving loop run itself.
-          </h2>
-          <p className="max-w-md text-sm text-zinc-400">
-            Launch a best-of-N experiment and see the planes light up, the agents race, and the
-            leaderboard sort itself, live.
-          </p>
-          <Link to="/console">
-            <Button className="px-6 py-2.5">Launch the console →</Button>
-          </Link>
-        </CardContent>
-      </Card>
+      <Reveal>
+        <Card className="relative overflow-hidden border-emerald-900/50 bg-gradient-to-br from-emerald-950/30 to-zinc-900/40">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -bottom-24 left-1/2 h-64 w-[480px] -translate-x-1/2 animate-ember-drift rounded-full bg-[radial-gradient(ellipse_at_center,rgba(194,84,63,0.12),transparent_65%)] blur-2xl"
+          />
+          <CardContent className="relative flex flex-col items-center gap-4 py-10 text-center">
+            <h2 className="font-display text-3xl font-medium tracking-tight text-zinc-50">
+              Watch a self-improving loop run itself.
+            </h2>
+            <p className="max-w-md text-sm text-zinc-400">
+              Launch a best-of-N experiment and see the planes light up, the agents race, and the
+              leaderboard sort itself, live.
+            </p>
+            <Link to="/console">
+              <Button className="animate-shimmer bg-[linear-gradient(110deg,#10b981,45%,#5eead4,55%,#10b981)] bg-[length:200%_100%] px-6 py-2.5 transition-transform hover:-translate-y-0.5">
+                Launch the console →
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </Reveal>
     </section>
   );
 }
