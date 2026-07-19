@@ -10,6 +10,7 @@ import {
 import type { RoundPoint } from "../../types";
 import { improvementSentence, roundPct } from "../../lib/plain";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { ChartBox } from "./ChartBox";
 
 interface TipProps {
   active?: boolean;
@@ -47,7 +48,8 @@ export function Progression({ progression }: { progression: RoundPoint[] }) {
       </CardHeader>
       <CardContent>
         {sentence && <p className="mb-3 text-sm leading-relaxed text-zinc-300">{sentence}</p>}
-        <ResponsiveContainer width="100%" height={200}>
+        <ChartBox height={200}>
+        <ResponsiveContainer width="100%" height="100%">
           <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 4, left: -12 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
             <XAxis
@@ -70,6 +72,7 @@ export function Progression({ progression }: { progression: RoundPoint[] }) {
             />
           </LineChart>
         </ResponsiveContainer>
+        </ChartBox>
       </CardContent>
     </Card>
   );

@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import type { CandidateState } from "../../types";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { ChartBox } from "./ChartBox";
 
 interface Row {
   name: string;
@@ -74,7 +75,8 @@ export function Leaderboard({
         <span className="text-[11px] text-zinc-500">a gap = the reward-hack</span>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={220}>
+        <ChartBox height={220}>
+        <ResponsiveContainer width="100%" height="100%">
           <BarChart data={rows} barGap={2}>
             <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
             <XAxis dataKey="name" stroke="#71717a" fontSize={12} tickLine={false} />
@@ -89,6 +91,7 @@ export function Leaderboard({
             </Bar>
           </BarChart>
         </ResponsiveContainer>
+        </ChartBox>
         <div className="mt-2 flex gap-4 text-[11px] text-zinc-500">
           <span><span className="inline-block h-2 w-2 rounded-sm" style={{ background: "#475569" }} /> in-sandbox</span>
           <span><span className="inline-block h-2 w-2 rounded-sm" style={{ background: "#34d399" }} /> held-out (verified)</span>

@@ -8,7 +8,11 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card, CardContent } from "../ui/card";
 import { Skeleton } from "../ui/skeleton";
+import type { TraceEvent } from "../../types";
+import { ActivityBreakdown } from "./ActivityBreakdown";
+import { ActivityTimeline } from "./ActivityTimeline";
 import { CandidateCard } from "./CandidateCard";
+import { GapChart } from "./GapChart";
 import { Leaderboard } from "./Leaderboard";
 import { Progression } from "./Progression";
 import { SimpleDashboard } from "./SimpleDashboard";
@@ -99,6 +103,7 @@ export function ExperimentDashboard({
         <TechnicalView
           exp={exp}
           cands={cands}
+          events={events}
           hashes={hashes}
           identical={identical}
           egressBlocked={egressBlocked}
@@ -111,12 +116,14 @@ export function ExperimentDashboard({
 function TechnicalView({
   exp,
   cands,
+  events,
   hashes,
   identical,
   egressBlocked,
 }: {
   exp: ExperimentState;
   cands: CandidateState[];
+  events: TraceEvent[];
   hashes: (string | undefined)[];
   identical: boolean;
   egressBlocked: CandidateState[];
@@ -151,12 +158,20 @@ function TechnicalView({
       )}
 
       {cands.length > 0 ? (
-        <Leaderboard cands={cands} winner={exp.winner} />
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <Leaderboard cands={cands} winner={exp.winner} />
+          <GapChart cands={cands} />
+        </div>
       ) : (
         <Card>
           <CardContent className="text-xs text-zinc-500">Warming candidates…</CardContent>
         </Card>
       )}
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <ActivityTimeline events={events} candidateCount={cands.length} />
+        <ActivityBreakdown cands={cands} />
+      </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {cands.map((c) => (

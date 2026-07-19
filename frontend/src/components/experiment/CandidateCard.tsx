@@ -47,10 +47,12 @@ function LogLine({ event }: { event: TraceEvent }) {
 }
 
 export function CandidateCard({ c, winner }: { c: CandidateState; winner: boolean }) {
-  const endRef = useRef<HTMLDivElement>(null);
+  const logRef = useRef<HTMLDivElement>(null);
   const [showCode, setShowCode] = useState(false);
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
+    // Scroll only the log box; scrollIntoView would hijack the page scroll on every event.
+    const el = logRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [c.log.length]);
 
   const sample = c.sampleTotal ? `${c.inSandbox ?? 0}/${c.sampleTotal}` : "—";
@@ -89,7 +91,7 @@ export function CandidateCard({ c, winner }: { c: CandidateState; winner: boolea
             )}
           </div>
         )}
-        <div className="h-40 overflow-y-auto rounded-md border border-zinc-800 bg-black/40 p-2 font-mono text-[11px] leading-relaxed">
+        <div ref={logRef} className="h-40 overflow-y-auto rounded-md border border-zinc-800 bg-black/40 p-2 font-mono text-[11px] leading-relaxed">
           {c.log.length === 0 ? (
             <span className="text-zinc-600">provisioning…</span>
           ) : (
@@ -97,7 +99,6 @@ export function CandidateCard({ c, winner }: { c: CandidateState; winner: boolea
               {c.log.map((e, i) => (
                 <LogLine key={i} event={e} />
               ))}
-              <div ref={endRef} />
             </div>
           )}
         </div>
