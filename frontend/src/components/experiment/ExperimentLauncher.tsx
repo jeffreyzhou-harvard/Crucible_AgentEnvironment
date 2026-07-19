@@ -4,6 +4,25 @@ import type { ExperimentLaunchResponse } from "../../types";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 
+const STEPS = [
+  {
+    title: "Sandboxes boot",
+    body: "Each AI gets its own locked-down copy of the workspace from the warm pool: identical files, no network, no secrets.",
+  },
+  {
+    title: "AIs attempt the problem",
+    body: "They read the practice examples, write a solution, and test it. Cheaters may try planted shortcut files or blocked URLs.",
+  },
+  {
+    title: "Hidden test grades everyone",
+    body: "A fresh sandbox re-runs each solution against cases the AI never saw. Memorized answers fall apart here.",
+  },
+  {
+    title: "Leaderboard settles it",
+    body: "Honest generalizers rise, cheaters show a practice-vs-hidden score gap and get disqualified in front of you.",
+  },
+];
+
 const TASKS = [
   {
     id: "cipher",
@@ -55,7 +74,8 @@ export function ExperimentLauncher({
     "w-20 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none";
 
   return (
-    <Card className="mx-auto max-w-2xl">
+    <div className="mx-auto grid max-w-5xl items-start gap-6 lg:grid-cols-[1fr_20rem]">
+      <Card>
       <CardHeader>
         <CardTitle>Set up an AI face-off</CardTitle>
         <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">
@@ -136,6 +156,26 @@ export function ExperimentLauncher({
           </Button>
         </form>
       </CardContent>
-    </Card>
+      </Card>
+
+      <aside className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-5">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          What happens when you hit start
+        </h3>
+        <ol className="mt-4 space-y-4">
+          {STEPS.map((step, i) => (
+            <li key={step.title} className="flex gap-3">
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-800 bg-emerald-950/60 text-[10px] font-semibold text-emerald-400">
+                {i + 1}
+              </span>
+              <div>
+                <div className="text-xs font-medium text-zinc-200">{step.title}</div>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-zinc-500">{step.body}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </aside>
+    </div>
   );
 }

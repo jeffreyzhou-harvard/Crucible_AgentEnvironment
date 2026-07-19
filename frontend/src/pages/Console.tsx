@@ -6,6 +6,7 @@ import { ExperimentLauncher } from "../components/experiment/ExperimentLauncher"
 import { ExperimentDashboard } from "../components/experiment/ExperimentDashboard";
 import { cn } from "../lib/utils";
 import type { ExperimentLaunchResponse, LaunchResponse } from "../types";
+import logoUrl from "../assets/CrucibleLogo.png";
 
 type Mode = "experiment" | "single";
 
@@ -40,8 +41,9 @@ export default function Console() {
     <div className="mx-auto flex h-full max-w-6xl flex-col px-6 py-6">
       <header className="mb-6 flex items-center justify-between">
         <Link to="/" className="group">
-          <h1 className="text-lg font-semibold tracking-tight text-zinc-100">
-            <span className="text-emerald-400">◆</span> Crucible
+          <h1 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-zinc-100">
+            <img src={logoUrl} alt="Crucible" className="h-7 w-7 object-contain" />
+            Crucible
           </h1>
           <p className="text-xs text-zinc-500 group-hover:text-zinc-400">← back to home</p>
         </Link>

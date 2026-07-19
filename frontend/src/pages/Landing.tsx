@@ -3,6 +3,7 @@ import { Accordion } from "../components/ui/accordion";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
+import logoUrl from "../assets/CrucibleLogo.png";
 
 const REPO = "https://github.com/jeffreyzhou-harvard/AutoResearchEnvironment";
 const CONCEPT = "https://neosigma.ai/blog/agent-workspaces";
@@ -10,8 +11,9 @@ const CONCEPT = "https://neosigma.ai/blog/agent-workspaces";
 // Element 2 - logo / brand
 function Wordmark() {
   return (
-    <span className="text-base font-semibold tracking-tight text-zinc-100">
-      <span className="text-emerald-400">◆</span> Crucible
+    <span className="inline-flex items-center gap-2 text-base font-semibold tracking-tight text-zinc-100">
+      <img src={logoUrl} alt="Crucible" className="h-7 w-7 object-contain" />
+      Crucible
     </span>
   );
 }
@@ -87,7 +89,7 @@ function Hero() {
           {/* Element 5 - social proof (context) */}
           <Badge className="border-zinc-700 text-zinc-400">Auto Research Summit · Build Session</Badge>
           {/* Element 3 - SEO title + subtitle */}
-          <h1 className="mt-4 text-4xl font-semibold leading-tight tracking-tight text-zinc-50 sm:text-5xl">
+          <h1 className="mt-4 text-balance text-5xl font-semibold leading-[1.08] tracking-tight text-zinc-50 sm:text-6xl">
             The environment self-improving agents run in.
           </h1>
           <p className="mt-4 max-w-md text-base leading-relaxed text-zinc-400">
