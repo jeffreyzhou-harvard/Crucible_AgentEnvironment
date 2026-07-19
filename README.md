@@ -1,6 +1,6 @@
-# agent-workspaces
+# Crucible
 
-A template for building **agent workspaces** — sandbox environments where autonomous
+**Crucible** is a template for building sandbox environments where autonomous
 AI agents can safely execute code, interact with real services, and verify their own
 work. Inspired by [NeoSigma's *Agent Workspaces*](https://neosigma.ai/blog/agent-workspaces).
 

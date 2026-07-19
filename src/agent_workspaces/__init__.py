@@ -1,4 +1,4 @@
-"""agent_workspaces — sandbox environments where AI agents safely act.
+"""Crucible — sandbox environments where AI agents safely act.
 
 The package is organized into four planes plus a cross-cutting trace concern:
 

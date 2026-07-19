@@ -117,7 +117,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # TODO: also destroy every still-live sandbox on shutdown (needs a live registry).
 
 
-app = FastAPI(title="agent-workspaces control plane", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Crucible control plane", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

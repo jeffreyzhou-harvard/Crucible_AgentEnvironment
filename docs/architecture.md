@@ -1,6 +1,6 @@
 # Architecture
 
-This template implements the *agent workspaces* model: sandbox environments where
+This is the architecture of **Crucible**: sandbox environments where
 autonomous agents safely execute code, interact with services, and verify their own
 work. The design refuses the usual trade-off between **fidelity**, **isolation**,
 and **speed** — it pushes on all of them at once by splitting concerns into four

@@ -6,6 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 
 const TASKS = [
   {
+    id: "cipher",
+    label: "Hidden cipher — hard",
+    blurb:
+      "4 sample · 12 held-out · infer the rule from pairs. Case handling is only tested held-out, so sloppy inference shows as a score gap. Planted pair file + a blocked URL.",
+  },
+  {
     id: "sequence",
     label: "Guess the number pattern (the tricky one)",
     blurb:

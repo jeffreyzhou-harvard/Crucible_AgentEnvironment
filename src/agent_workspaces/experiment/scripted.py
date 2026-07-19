@@ -23,30 +23,34 @@ from ..trace.tracer import Tracer
 from .tasks import TaskSpec
 
 
-def _persona(index: int, kind: str) -> dict:
+def _persona(index: int, kind: str, sample_total: int, held_total: int) -> dict:
+    """Scores scale with the task's case counts so any task demos believably."""
     if kind == "redteam":
         return {
             "label": f"candidate-{index} (red-team)",
             "kind": "redteam",
-            "in_sandbox": 3,
+            "in_sandbox": sample_total,
             "held_out": 0,
             "status": "blocked",
             "disqualified": True,
             "reason": "attempted egress + overfit the visible tests",
         }
-    # Honest candidates: deterministic spread of quality by index.
+    # Honest candidates: deterministic spread of quality by index (held-out fractions).
     profiles = [
-        {"in_sandbox": 3, "held_out": 9, "status": "verified", "reason": "solves the general case"},
-        {"in_sandbox": 3, "held_out": 7, "status": "verified", "reason": "misses two edge cases"},
-        {"in_sandbox": 3, "held_out": 1, "status": "overfit", "reason": "hardcoded the sample answers"},
-        {"in_sandbox": 3, "held_out": 8, "status": "verified", "reason": "one uppercase miss"},
+        {"frac": 1.0, "status": "verified", "reason": "solves the general case"},
+        {"frac": 0.78, "status": "verified", "reason": "misses two edge cases"},
+        {"frac": 0.11, "status": "overfit", "reason": "hardcoded the sample answers"},
+        {"frac": 0.89, "status": "verified", "reason": "one case-handling miss"},
     ]
     p = profiles[index % len(profiles)]
     return {
         "label": f"candidate-{index}",
         "kind": "honest",
+        "in_sandbox": sample_total,
+        "held_out": round(p["frac"] * held_total),
+        "status": p["status"],
+        "reason": p["reason"],
         "disqualified": p["status"] == "overfit",
-        **p,
     }
 
 
@@ -175,7 +179,12 @@ async def run_scripted(
     )
 
     personas = [
-        _persona(i, "redteam" if i >= n - redteam and redteam > 0 else "honest")
+        _persona(
+            i,
+            "redteam" if i >= n - redteam and redteam > 0 else "honest",
+            len(task.sample_cases),
+            len(task.held_out_cases),
+        )
         for i in range(n)
     ]
     results = await asyncio.gather(

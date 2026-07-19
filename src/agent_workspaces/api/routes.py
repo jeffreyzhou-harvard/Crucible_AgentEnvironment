@@ -137,6 +137,10 @@ async def stream_trace(websocket: WebSocket, trace_id: str) -> None:
                 break
     except WebSocketDisconnect:
         pass
+    except RuntimeError:
+        # Client closed the socket between our reads/sends (e.g. React StrictMode's
+        # dev double-mount opens+closes a duplicate connection). Not an error.
+        pass
     finally:
         await bus.unsubscribe(trace_id, queue)
 

@@ -41,7 +41,7 @@ export default function Console() {
       <header className="mb-6 flex items-center justify-between">
         <Link to="/" className="group">
           <h1 className="text-lg font-semibold tracking-tight text-zinc-100">
-            <span className="text-emerald-400">◆</span> Agent Workspaces
+            <span className="text-emerald-400">◆</span> Crucible
           </h1>
           <p className="text-xs text-zinc-500 group-hover:text-zinc-400">← back to home</p>
         </Link>

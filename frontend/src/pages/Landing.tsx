@@ -11,7 +11,7 @@ const CONCEPT = "https://neosigma.ai/blog/agent-workspaces";
 function Wordmark() {
   return (
     <span className="text-base font-semibold tracking-tight text-zinc-100">
-      <span className="text-emerald-400">◆</span> Agent Workspaces
+      <span className="text-emerald-400">◆</span> Crucible
     </span>
   );
 }
@@ -176,7 +176,7 @@ function Faq() {
       <h2 className="mb-5 text-sm font-semibold uppercase tracking-wide text-zinc-500">FAQ</h2>
       <Accordion
         items={[
-          { q: "What is Agent Workspaces?", a: "Sandbox environments where autonomous agents safely execute code, interact with real services, and verify their own work — the environment layer a self-improving research loop runs on." },
+          { q: "What is Crucible?", a: "Sandbox environments where autonomous agents safely execute code, interact with real services, and verify their own work — the environment layer a self-improving research loop runs on." },
           { q: "Do I need Docker or an API key?", a: "No. The console ships a scripted mode that runs the whole flow with neither. Add Docker + an Anthropic key to run real agents in real containers." },
           { q: "What is a best-of-N experiment?", a: "N agents solve the same task in parallel, each in an isolated, byte-identical sandbox, scored against a held-out grader. Propose → test → validate → select: the atomic unit of self-improvement." },
           { q: "How do you stop an agent from gaming the score?", a: "Every candidate is scored on held-out cases it never sees, in a fresh sandbox. High in-sandbox but low held-out means overfitting — the candidate is disqualified, not rewarded." },
@@ -249,7 +249,7 @@ function Footer() {
           <Button type="submit" variant="outline" className="px-3 py-2 text-xs">Keep me posted</Button>
         </form>
         <div className="mt-8 text-xs text-zinc-600">
-          © 2026 Agent Workspaces · MIT (TODO) · <a href={CONCEPT} target="_blank" rel="noreferrer" className="hover:text-zinc-400">concept ↗</a>
+          © 2026 Crucible · MIT (TODO) · <a href={CONCEPT} target="_blank" rel="noreferrer" className="hover:text-zinc-400">concept ↗</a>
         </div>
       </div>
     </footer>
