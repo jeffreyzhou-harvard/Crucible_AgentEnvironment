@@ -10,6 +10,7 @@ import { Card, CardContent } from "../ui/card";
 import { Skeleton } from "../ui/skeleton";
 import { CandidateCard } from "./CandidateCard";
 import { Leaderboard } from "./Leaderboard";
+import { Progression } from "./Progression";
 import { SimpleDashboard } from "./SimpleDashboard";
 
 const STATUS_LABEL: Record<StreamStatus, string> = {
@@ -122,6 +123,8 @@ function TechnicalView({
 }) {
   return (
     <div className="space-y-4">
+
+      {exp.progression.length > 1 && <Progression progression={exp.progression} />}
 
       {/* Reproducibility receipt — the copy-on-write "identical world" proof. */}
       {hashes.length > 0 && (

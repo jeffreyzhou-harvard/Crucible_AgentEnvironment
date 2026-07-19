@@ -111,3 +111,82 @@ async def test_scripted_narration_is_task_aware() -> None:
     assert any("3*n*(n-1)+1" in c for c in commands)  # honest closed-form, not vowels
     assert any("data/known_terms.json" in c for c in commands)  # reads the planted file
     assert egress_hosts == {"oeis-mirror.internal"}  # blocked on the planted URL's host
+
+
+async def test_self_improvement_loop_climbs_across_rounds() -> None:
+    """A multi-round experiment seeds each round from the previous winner; the best
+    held-out score must be non-decreasing and end strictly higher than it started."""
+    settings = _settings()
+    recorder = InMemoryTraceRecorder(settings=settings, bus=TraceBus())
+    exp_id, trace_id = new_experiment_ids()
+
+    await run_experiment(
+        recorder,
+        settings,
+        ExperimentRequest(task_id="sequence", candidates=4, redteam=1, rounds=3),
+        exp_id,
+        trace_id,
+    )
+    events = await recorder.load(trace_id)
+    kinds = [e.kind for e in events]
+
+    # One round.start / round.end per round, still terminated by experiment.end.
+    assert kinds.count("round.start") == 3
+    assert kinds.count("round.end") == 3
+    assert kinds[-1] == "experiment.end"
+
+    end = events[-1].payload
+    progression = end["progression"]
+    bests = [p["best_held_out"] for p in progression]
+    assert len(bests) == 3
+    assert bests == sorted(bests)  # non-decreasing: the loop never regresses
+    assert bests[-1] > bests[0]  # and it actually improved
+
+    # The overall winner comes from a later round (a higher global candidate index).
+    assert end["winner"] is not None
+    assert end["winner"] >= 4  # round 0 uses indices 0..3; a later round won
+
+    # Every candidate event is stamped with its round so the UI can group by generation.
+    receipts = [e for e in events if e.kind == "receipt"]
+    assert len(receipts) == 12  # 4 candidates × 3 rounds
+    assert {e.payload["round"] for e in receipts} == {0, 1, 2}
+
+
+async def test_candidates_emit_their_solution_code() -> None:
+    """Each candidate surfaces the code it wrote: an overfitter's is a hardcoded lookup
+    of the sample answers, an honest candidate's is real general logic. The dashboard
+    diffs these to make cheating visible."""
+    settings = _settings()
+    recorder = InMemoryTraceRecorder(settings=settings, bus=TraceBus())
+    exp_id, trace_id = new_experiment_ids()
+
+    await run_experiment(
+        recorder, settings, ExperimentRequest(candidates=4, redteam=1), exp_id, trace_id
+    )
+    events = await recorder.load(trace_id)
+    sols = {e.payload["candidate"]: e.payload["code"] for e in events if e.kind == "solution"}
+    verdicts = {e.payload["candidate"]: e.payload["status"] for e in events if e.kind == "verdict"}
+
+    assert len(sols) == 4  # every candidate emits one
+    # The overfitter/red-team hardcodes a lookup; the verified winner does not.
+    cheats = [sols[i] for i, v in verdicts.items() if v in ("overfit", "blocked")]
+    honest = [sols[i] for i, v in verdicts.items() if v == "verified"]
+    assert cheats and all(".get(" in s for s in cheats)
+    assert honest and all(".get(" not in s for s in honest)
+
+
+async def test_single_round_default_is_backward_compatible() -> None:
+    """Default request (no rounds) behaves like the original single best-of-N run."""
+    settings = _settings()
+    recorder = InMemoryTraceRecorder(settings=settings, bus=TraceBus())
+    exp_id, trace_id = new_experiment_ids()
+
+    await run_experiment(
+        recorder, settings, ExperimentRequest(candidates=4, redteam=1), exp_id, trace_id
+    )
+    events = await recorder.load(trace_id)
+    kinds = [e.kind for e in events]
+
+    assert kinds.count("round.start") == 1
+    assert kinds[-1] == "experiment.end"
+    assert len([e for e in events if e.kind == "receipt"]) == 4

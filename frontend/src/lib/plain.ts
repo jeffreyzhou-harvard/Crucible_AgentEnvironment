@@ -2,7 +2,7 @@
 // held-out scores, egress denials, overfit/blocked verdicts) into language a
 // non-expert can follow. Pure functions only — no JSX — so it stays testable.
 
-import type { CandidateState, ExperimentState } from "../types";
+import type { CandidateState, ExperimentState, RoundPoint } from "../types";
 
 export type Tone = "good" | "warn" | "bad" | "info" | "muted";
 
@@ -129,6 +129,25 @@ export function plainSummary(exp: ExperimentState, cands: CandidateState[]): Pla
     identicalStart: hashes.length > 0 && new Set(hashes).size === 1,
     finished: exp.ended,
   };
+}
+
+export function roundPct(p: RoundPoint): number {
+  return p.heldTotal ? Math.round((100 * p.bestHeldOut) / p.heldTotal) : 0;
+}
+
+/** Plain sentence describing how the loop improved across rounds, or null for a
+ * single round (nothing to compare). */
+export function improvementSentence(progression: RoundPoint[]): string | null {
+  if (progression.length < 2) return null;
+  const pcts = progression.map(roundPct);
+  const arrow = `${pcts.join("% → ")}%`;
+  const first = pcts[0];
+  const last = pcts[pcts.length - 1];
+  if (last > first) {
+    return `It kept getting better: each round started from the previous best solution, and the score on the hidden test climbed ${arrow}.`;
+  }
+  if (last === first) return `The score held steady across rounds: ${arrow}.`;
+  return `The score across rounds: ${arrow}.`;
 }
 
 export interface StoryLine {

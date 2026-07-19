@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     # --- Experiments (fan-out best-of-N) ---
     experiment_candidates: int = 4          # how many candidates race per experiment
     experiment_redteam: int = 1             # how many are adversarial (probe the controls)
+    experiment_rounds: int = 1              # self-improvement rounds (winner seeds the next)
     # Force the scripted (no Docker / no API key) experiment path regardless of backend.
     experiment_scripted: bool = False
     experiment_step_delay: float = 0.35     # scripted pacing (seconds between beats)

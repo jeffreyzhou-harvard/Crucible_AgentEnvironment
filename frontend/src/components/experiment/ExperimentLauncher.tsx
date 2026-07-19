@@ -32,6 +32,7 @@ export function ExperimentLauncher({
   const [taskId, setTaskId] = useState(TASKS[0].id);
   const [candidates, setCandidates] = useState(4);
   const [redteam, setRedteam] = useState(2);
+  const [rounds, setRounds] = useState(3);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,7 +43,7 @@ export function ExperimentLauncher({
     setSubmitting(true);
     setError(null);
     try {
-      onLaunched(await launchExperiment({ task_id: taskId, candidates, redteam }));
+      onLaunched(await launchExperiment({ task_id: taskId, candidates, redteam, rounds }));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -108,6 +109,20 @@ export function ExperimentLauncher({
               />
               <p className="mt-1 max-w-[9rem] text-[11px] leading-tight text-zinc-500">
                 Told to cheat on purpose, to prove the safety net works.
+              </p>
+            </label>
+            <label className="text-xs text-zinc-400">
+              <div className="mb-1.5 uppercase tracking-wide text-zinc-500">Rounds</div>
+              <input
+                type="number"
+                min={1}
+                max={8}
+                className={inputCls}
+                value={rounds}
+                onChange={(e) => setRounds(Number(e.target.value))}
+              />
+              <p className="mt-1 max-w-[9rem] text-[11px] leading-tight text-zinc-500">
+                Each round improves on the last one's winner. Watch the score climb.
               </p>
             </label>
           </div>

@@ -137,6 +137,7 @@ class ExperimentRequest(BaseModel):
     task_id: str = "devowel"  # which task in experiment/tasks.py
     candidates: int | None = None  # default: settings.experiment_candidates
     redteam: int | None = None  # how many adversarial candidates; default from settings
+    rounds: int | None = None  # self-improvement rounds; each seeds the next from the winner
 
 
 class ExperimentLaunchResponse(BaseModel):

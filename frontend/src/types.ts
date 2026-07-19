@@ -31,6 +31,7 @@ export interface ExperimentRequest {
   task_id: string;
   candidates: number;
   redteam?: number;
+  rounds?: number;
 }
 
 export interface ExperimentLaunchResponse {
@@ -42,6 +43,7 @@ export type Verdict = "verified" | "overfit" | "blocked" | "failed" | "error" | 
 
 export interface CandidateState {
   index: number;
+  round: number;
   label: string;
   role: "honest" | "redteam" | string;
   worldHash?: string;
@@ -54,16 +56,25 @@ export interface CandidateState {
   disqualified: boolean;
   reason?: string;
   egressDenied: number;
+  solution?: string;
+}
+
+export interface RoundPoint {
+  round: number;
+  bestHeldOut: number;
+  heldTotal: number;
 }
 
 export interface ExperimentState {
   taskTitle?: string;
   taskPrompt?: string;
   candidates: number;
+  rounds: number;
   allowlist: string[];
   worldHash?: string;
   mode?: string;
   winner: number | null;
   ended: boolean;
+  progression: RoundPoint[];
   cands: Record<number, CandidateState>;
 }

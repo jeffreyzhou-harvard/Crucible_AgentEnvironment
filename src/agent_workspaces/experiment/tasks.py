@@ -51,6 +51,17 @@ class TaskSpec:
             h.update(f"{inp}={exp}".encode())
         return h.hexdigest()[:12]
 
+    def overfit_solution(self) -> str:
+        """A hardcoded lookup of just the visible sample cases — what an overfitter/
+        red-team writes. Aces the sample tests, fails the held-out grader. Used by the
+        scripted path so the dashboard can show the actual cheating code."""
+        mapping = ", ".join(f"{inp!r}: {out!r}" for inp, out in self.sample_cases)
+        return (
+            f"def {self.function_name}(x):\n"
+            f"    # memorized the visible samples — no general logic\n"
+            f"    return {{{mapping}}}.get(x)\n"
+        )
+
     def sample_test_source(self, token: str = "") -> str:
         return _render_grader(self.solution_filename, self.function_name, self.sample_cases, token)
 

@@ -14,6 +14,7 @@ import {
 } from "../../lib/plain";
 import { Card, CardContent } from "../ui/card";
 import { cn } from "../../lib/utils";
+import { Progression } from "./Progression";
 
 const TONE: Record<Tone, { pill: string; bar: string; text: string; dot: string }> = {
   good: { pill: "border-emerald-700 bg-emerald-950/50 text-emerald-200", bar: "bg-emerald-500", text: "text-emerald-300", dot: "bg-emerald-400" },
@@ -50,13 +51,15 @@ function ScoreBar({ title, caption, score, tone }: { title: string; caption: str
   );
 }
 
-function AttemptCard({ c, isWinner }: { c: CandidateState; isWinner: boolean }) {
+function AttemptCard({ c, name, isWinner }: { c: CandidateState; name: string; isWinner: boolean }) {
   const [open, setOpen] = useState(false);
+  const [showCode, setShowCode] = useState(false);
   const st = plainStatus(c);
   const practice = practiceScore(c);
   const real = realScore(c);
   const note = roleNote(c.role);
   const story = plainStory(c.log);
+  const cheated = c.status === "overfit" || c.status === "blocked" || looksLikeFaking(c);
 
   return (
     <Card className={cn(isWinner && "ring-2 ring-emerald-500/60")}>
@@ -64,7 +67,7 @@ function AttemptCard({ c, isWinner }: { c: CandidateState; isWinner: boolean }) 
         <div className="flex items-start justify-between gap-2">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-zinc-100">{attemptName(c.index)}</span>
+              <span className="text-sm font-semibold text-zinc-100">{name}</span>
               {isWinner && <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-300">🏆 Winner</span>}
             </div>
             {note && <p className="mt-0.5 text-[11px] text-amber-400/80">{note}</p>}
@@ -103,6 +106,31 @@ function AttemptCard({ c, isWinner }: { c: CandidateState; isWinner: boolean }) 
           </p>
         )}
 
+        {c.solution && (
+          <div>
+            <button onClick={() => setShowCode((v) => !v)} className="text-[11px] font-medium text-zinc-400 hover:text-zinc-200">
+              {showCode ? "Hide the code it wrote ▴" : "See the code it wrote ▾"}
+            </button>
+            {showCode && (
+              <>
+                {cheated ? (
+                  <p className="mt-1.5 text-[11px] leading-snug text-amber-300">
+                    See how it just lists the sample answers instead of computing them? That's the memorizing — it falls
+                    apart on anything it hasn't seen.
+                  </p>
+                ) : (
+                  <p className="mt-1.5 text-[11px] leading-snug text-emerald-300/90">
+                    Real logic that works for any input — not a list of memorized answers.
+                  </p>
+                )}
+                <pre className="mt-1.5 overflow-x-auto rounded-md border border-zinc-800 bg-black/50 p-2.5 font-mono text-[11px] leading-relaxed text-zinc-300">
+                  {c.solution.trimEnd()}
+                </pre>
+              </>
+            )}
+          </div>
+        )}
+
         {story.length > 0 && (
           <div>
             <button onClick={() => setOpen((v) => !v)} className="text-[11px] font-medium text-zinc-400 hover:text-zinc-200">
@@ -135,6 +163,33 @@ export function SimpleDashboard({
   live: boolean;
 }) {
   const s = plainSummary(exp, cands);
+  const multiRound = (exp.rounds ?? 1) > 1;
+
+  // Group candidates by round so we can browse one generation at a time.
+  const byRound = new Map<number, CandidateState[]>();
+  for (const c of cands) {
+    const arr = byRound.get(c.round) ?? [];
+    arr.push(c);
+    byRound.set(c.round, arr);
+  }
+  const roundKeys = [...byRound.keys()].sort((a, b) => a - b);
+  const latestRound = roundKeys.length ? roundKeys[roundKeys.length - 1] : 0;
+  const [picked, setPicked] = useState<number | null>(null);
+  const activeRound = picked !== null && byRound.has(picked) ? picked : latestRound;
+  const shown = (byRound.get(activeRound) ?? []).sort((a, b) => a.index - b.index);
+
+  // A winner name that matches the per-round local labels ("Attempt A in round 3").
+  let winnerLabel = s.winnerName;
+  if (exp.winner !== null) {
+    for (const r of roundKeys) {
+      const group = (byRound.get(r) ?? []).sort((a, b) => a.index - b.index);
+      const pos = group.findIndex((c) => c.index === exp.winner);
+      if (pos >= 0) {
+        winnerLabel = multiRound ? `${attemptName(pos)} in round ${r + 1}` : attemptName(pos);
+        break;
+      }
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -154,6 +209,12 @@ export function SimpleDashboard({
               <span className="text-zinc-200">hidden test it could not</span>. Only the hidden test counts — that's how we
               catch an AI that just memorized the practice answers instead of actually solving the problem.
             </p>
+            {multiRound && (
+              <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-zinc-400">
+                We ran it <span className="text-zinc-200">{exp.rounds} rounds</span>: each round starts from the best
+                solution of the last one and tries to improve it — a self-improvement loop.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -167,14 +228,14 @@ export function SimpleDashboard({
             <div
               className={cn(
                 "rounded-lg border px-4 py-3 text-sm",
-                s.winnerName
+                winnerLabel
                   ? "border-emerald-800 bg-emerald-950/40 text-emerald-200"
                   : "border-zinc-800 bg-zinc-950/60 text-zinc-300",
               )}
             >
-              {s.winnerName ? (
+              {winnerLabel ? (
                 <>
-                  🏆 <span className="font-semibold">{s.winnerName}</span> wins — it's the best solution that actually
+                  🏆 <span className="font-semibold">{winnerLabel}</span> wins — it's the best solution that actually
                   passed the hidden test. The ones that cheated or broke the rules were thrown out automatically.
                 </>
               ) : (
@@ -184,6 +245,9 @@ export function SimpleDashboard({
           )}
         </CardContent>
       </Card>
+
+      {/* Self-improvement across rounds */}
+      {multiRound && <Progression progression={exp.progression} />}
 
       {/* Safety, in plain terms */}
       <Card>
@@ -195,12 +259,33 @@ export function SimpleDashboard({
         </CardContent>
       </Card>
 
-      {/* Per-attempt detail */}
+      {/* Per-attempt detail (one round at a time) */}
       {cands.length > 0 ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {cands.map((c) => (
-            <AttemptCard key={c.index} c={c} isWinner={c.index === exp.winner} />
-          ))}
+        <div className="space-y-3">
+          {multiRound && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-zinc-500">Look at each round:</span>
+              {roundKeys.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setPicked(r)}
+                  className={cn(
+                    "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+                    r === activeRound
+                      ? "border-emerald-700 bg-emerald-950/50 text-emerald-200"
+                      : "border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:text-zinc-200",
+                  )}
+                >
+                  Round {r + 1}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {shown.map((c, i) => (
+              <AttemptCard key={c.index} c={c} name={attemptName(i)} isWinner={c.index === exp.winner} />
+            ))}
+          </div>
         </div>
       ) : (
         <Card>

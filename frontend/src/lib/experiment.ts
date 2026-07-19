@@ -12,6 +12,7 @@ const LOG_KINDS = new Set([
 function blankCandidate(index: number): CandidateState {
   return {
     index,
+    round: 0,
     label: `candidate-${index}`,
     role: "honest",
     log: [],
@@ -25,10 +26,23 @@ function blankCandidate(index: number): CandidateState {
 export function deriveExperiment(events: TraceEvent[]): ExperimentState {
   const state: ExperimentState = {
     candidates: 0,
+    rounds: 1,
     allowlist: [],
     winner: null,
     ended: false,
+    progression: [],
     cands: {},
+  };
+
+  const upsertRound = (round: number, best: number, total: number) => {
+    const existing = state.progression.find((p) => p.round === round);
+    if (existing) {
+      existing.bestHeldOut = best;
+      existing.heldTotal = total;
+    } else {
+      state.progression.push({ round, bestHeldOut: best, heldTotal: total });
+      state.progression.sort((a, b) => a.round - b.round);
+    }
   };
 
   const ensure = (i: number): CandidateState => {
@@ -43,16 +57,25 @@ export function deriveExperiment(events: TraceEvent[]): ExperimentState {
       state.taskTitle = p.task_title as string;
       state.taskPrompt = p.task_prompt as string;
       state.candidates = (p.candidates as number) ?? 0;
+      state.rounds = (p.rounds as number) ?? 1;
       state.allowlist = (p.allowlist as string[]) ?? [];
       state.worldHash = p.world_hash as string;
       state.mode = p.mode as string;
       continue;
     }
+    if (e.kind === "round.end") {
+      upsertRound(p.round as number, p.best_held_out as number, p.held_total as number);
+      continue;
+    }
     if (e.kind === "experiment.end") {
       state.ended = true;
       state.winner = (p.winner as number | null) ?? null;
+      for (const pt of (p.progression as Record<string, unknown>[]) ?? []) {
+        upsertRound(pt.round as number, pt.best_held_out as number, pt.held_total as number);
+      }
       for (const row of (p.leaderboard as Record<string, unknown>[]) ?? []) {
         const c = ensure(row.candidate as number);
+        if (typeof row.round === "number") c.round = row.round;
         c.status = (row.status as Verdict) ?? c.status;
         c.disqualified = (row.disqualified as boolean) ?? c.disqualified;
         if (c.heldOut === undefined) c.heldOut = row.held_out as number;
@@ -64,6 +87,7 @@ export function deriveExperiment(events: TraceEvent[]): ExperimentState {
     const idx = p.candidate as number | undefined;
     if (idx === undefined) continue;
     const c = ensure(idx);
+    if (typeof p.round === "number") c.round = p.round;
 
     switch (e.kind) {
       case "candidate.start":
@@ -83,6 +107,9 @@ export function deriveExperiment(events: TraceEvent[]): ExperimentState {
         c.status = (p.status as Verdict) ?? c.status;
         c.disqualified = (p.disqualified as boolean) ?? c.disqualified;
         c.reason = p.reason as string;
+        break;
+      case "solution":
+        c.solution = p.code as string;
         break;
       case "security.egress":
         if (p.allowed === false) c.egressDenied += 1;

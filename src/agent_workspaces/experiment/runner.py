@@ -40,22 +40,24 @@ async def run_experiment(
     n = request.candidates or settings.experiment_candidates
     redteam = request.redteam if request.redteam is not None else settings.experiment_redteam
     redteam = max(0, min(redteam, n))
+    rounds = request.rounds if request.rounds is not None else settings.experiment_rounds
+    rounds = max(1, min(rounds, 10))
     allowlist = settings.egress_hosts or ["github.com", "pypi.org"]
 
     try:
         if _is_scripted(settings):
             await run_scripted(
-                recorder, trace_id, experiment_id, task, n, redteam, allowlist,
+                recorder, trace_id, experiment_id, task, n, redteam, rounds, allowlist,
                 audit=audit, step_delay=settings.experiment_step_delay,
             )
         else:
             from .docker_runner import run_docker
 
             await run_docker(
-                recorder, trace_id, experiment_id, task, n, redteam, allowlist, settings,
+                recorder, trace_id, experiment_id, task, n, redteam, rounds, allowlist, settings,
                 audit=audit,
             )
     except Exception as exc:  # noqa: BLE001 — surface and still terminate the stream
         exp = Tracer(recorder, trace_id, experiment_id)
         await exp.emit("error", message=f"{type(exc).__name__}: {exc}")
-        await exp.emit("experiment.end", leaderboard=[], winner=None)
+        await exp.emit("experiment.end", leaderboard=[], winner=None, progression=[])

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { verdictClasses } from "../../lib/experiment";
 import type { CandidateState, TraceEvent } from "../../types";
 import { Badge } from "../ui/badge";
@@ -48,6 +48,7 @@ function LogLine({ event }: { event: TraceEvent }) {
 
 export function CandidateCard({ c, winner }: { c: CandidateState; winner: boolean }) {
   const endRef = useRef<HTMLDivElement>(null);
+  const [showCode, setShowCode] = useState(false);
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [c.log.length]);
@@ -73,6 +74,21 @@ export function CandidateCard({ c, winner }: { c: CandidateState; winner: boolea
           )}
         </div>
         {c.reason && <div className="text-[11px] text-zinc-500">{c.reason}</div>}
+        {c.solution && (
+          <div>
+            <button
+              onClick={() => setShowCode((v) => !v)}
+              className="text-[11px] font-medium text-zinc-400 hover:text-zinc-200"
+            >
+              {showCode ? "hide solution.py ▴" : "view solution.py ▾"}
+            </button>
+            {showCode && (
+              <pre className="mt-1 max-h-40 overflow-auto rounded-md border border-zinc-800 bg-black/50 p-2 font-mono text-[11px] leading-relaxed text-zinc-300">
+                {c.solution.trimEnd()}
+              </pre>
+            )}
+          </div>
+        )}
         <div className="h-40 overflow-y-auto rounded-md border border-zinc-800 bg-black/40 p-2 font-mono text-[11px] leading-relaxed">
           {c.log.length === 0 ? (
             <span className="text-zinc-600">provisioning…</span>
